@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "vite",
     "build:films": "node scripts/build-films.mjs",
@@ -13,6 +15,8 @@
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
+    "@tanstack/react-query": "^5.59.16",
+    "@tanstack/react-virtual": "^3.13.12",
     "framer-motion": "^12.23.22",
     "fuse.js": "^7.1.0",
     "lucide-react": "^0.544.0",
@@ -20,9 +24,7 @@
     "react": "^19.1.1",
     "react-countup": "^6.5.3",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.9.3",
-    "react-window": "^1.8.9",
-    "@tanstack/react-query": "^5.59.16"
+    "react-router-dom": "^7.9.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
@@ -36,7 +38,8 @@
     "globals": "^16.4.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
-    "vite": "npm:rolldown-vite@7.1.12"
+    "vite": "npm:rolldown-vite@7.1.12",
+    "vite-imagetools": "^9.0.0"
   },
   "overrides": {
     "vite": "npm:rolldown-vite@7.1.12"
