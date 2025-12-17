@@ -1,0 +1,5 @@
+//REDEPLOYER LE SITE APRES MODIF DU CODE -> aller dans Windows Powershell
+git add .
+git commit -m "mise à jour"
+git push origin main
+//

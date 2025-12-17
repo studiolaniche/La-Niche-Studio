@@ -53,8 +53,16 @@ export default function App() {
 
       {/* ---- FOOTER ---- */}
       <footer className="text-center text-xs md:text-sm p-4 border-t border-white/10 bg-black/80">
-        © {new Date().getFullYear()} La Niche Studio — Tous droits réservés
-      </footer>
+  <div className="opacity-90">
+    Accès gratuit • Dons volontaires • Une partie reversée aux ayants droits
+    <Link to="/soutenir" className="underline ml-2 hover:text-gray-300">
+      Comprendre / Soutenir
+    </Link>
+  </div>
+  <div className="mt-2 opacity-70">
+    © {new Date().getFullYear()} La Niche Studio — Association loi 1901
+  </div>
+</footer>
     </div>
   );
 }
