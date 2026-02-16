@@ -53,6 +53,7 @@ export default function Catalogue() {
   }, [films, query, selectedStatus]);
 
   if (loading) return <p className="px-6 opacity-70">Chargement…</p>;
+
   if (!filtered.length)
     return (
       <div className="px-6">

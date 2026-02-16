@@ -14,7 +14,10 @@ function extractVimeoId(value) {
 
 function cleanQuotes(s) {
   if (!s) return "";
-  return String(s).trim().replace(/^["'“”«»\s]+/, "").replace(/["'“”«»\s]+$/, "");
+  return String(s)
+    .trim()
+    .replace(/^["'“”«»\s]+/, "")
+    .replace(/["'“”«»\s]+$/, "");
 }
 
 function getDirectors(film) {
@@ -23,6 +26,26 @@ function getDirectors(film) {
 
 function getActors(film) {
   return Array.from({ length: 15 }, (_, i) => film[`ACTEUR${i + 1}`]).filter(Boolean);
+}
+
+// ✅ Tag stable : NOMDUFILM_REFERENCE (ex: GUM_2)
+// - base = NOMDUFILM (ou TITRE si NOMDUFILM vide)
+// - reference = REFERENCE (nombre dans ta sheet)
+function buildDonationTag(film) {
+  const baseRaw = film.NOMDUFILM || film.TITRE || "FILM";
+
+  const base = String(baseRaw)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // supprime accents
+    .toUpperCase()
+    .trim()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+
+  const ref = Number.isFinite(Number(film.REFERENCE)) ? Number(film.REFERENCE) : 1;
+
+  return `${base}_${ref}`;
 }
 
 /* ---------- page ---------- */
@@ -40,7 +63,9 @@ export default function Projet() {
   const directors = getDirectors(film);
   const actors = getActors(film);
   const duration =
-    (film.DUREE && String(film.DUREE).match(/\d+/) && `${String(film.DUREE).match(/\d+/)[0]} min`) ||
+    (film.DUREE &&
+      String(film.DUREE).match(/\d+/) &&
+      `${String(film.DUREE).match(/\d+/)[0]} min`) ||
     null;
 
   // 🖼️ Gestion robuste de la miniature
@@ -50,15 +75,17 @@ export default function Projet() {
       : `/miniatures/${film.MINIATURE}`
     : "/miniatures/placeholder.jpg";
 
+  // ✅ Tag de don (ex: GUM_2)
+  const donationTag = buildDonationTag(film);
+
   return (
     <div className="px-4 md:px-8 py-8 max-w-5xl mx-auto text-white">
-
       {/* 🧭 Fil d’Ariane */}
       <Breadcrumb
         items={[
           { label: "Accueil", href: "/" },
           { label: "Catalogue", href: "/catalogue" },
-          { label: film.TITRE }
+          { label: film.TITRE },
         ]}
       />
 
@@ -119,7 +146,9 @@ export default function Projet() {
       <div className="mb-8 grid sm:grid-cols-2 gap-6">
         {directors.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-white/80 mb-2">Réalisateur·ice·s</h3>
+            <h3 className="text-sm font-semibold text-white/80 mb-2">
+              Réalisateur·ice·s
+            </h3>
             <div className="flex flex-wrap gap-2">
               {directors.map((d, i) => (
                 <span key={i} className="px-2 py-1 bg-white/10 rounded text-xs">
@@ -143,44 +172,65 @@ export default function Projet() {
           </div>
         )}
 
-        {film["SELECTION FESTIVAL"] && (
+        {film.SELECTIONFESTIVAL && (
           <div>
-            <h3 className="text-sm font-semibold text-white/80 mb-2">Sélections</h3>
+            <h3 className="text-sm font-semibold text-white/80 mb-2">
+              Sélections
+            </h3>
             <p className="text-sm text-gray-200 whitespace-pre-line">
-              {cleanQuotes(film["SELECTION FESTIVAL"])}
+              {cleanQuotes(film.SELECTIONFESTIVAL)}
             </p>
           </div>
         )}
 
-        {film["PRIX FESTIVAL"] && (
+        {film.PRIXFESTIVAL && (
           <div>
             <h3 className="text-sm font-semibold text-white/80 mb-2">Prix</h3>
             <p className="text-sm text-gray-200 whitespace-pre-line">
-              {cleanQuotes(film["PRIX FESTIVAL"])}
+              {cleanQuotes(film.PRIXFESTIVAL)}
             </p>
           </div>
         )}
 
-        {film["CHAINE DE DROITS"] && (
+        {film.CHAINEDEDROITS && (
           <div className="sm:col-span-2">
-            <h3 className="text-sm font-semibold text-white/80 mb-2">Chaîne de droits</h3>
+            <h3 className="text-sm font-semibold text-white/80 mb-2">
+              Chaîne de droits
+            </h3>
             <p className="text-sm text-gray-200 whitespace-pre-line">
-              {cleanQuotes(film["CHAINE DE DROITS"])}
+              {cleanQuotes(film.CHAINEDEDROITS)}
             </p>
           </div>
         )}
       </div>
 
-      {/* Bouton don HelloAsso */}
-      <button
-        onClick={() => setOpen(true)}
-        className="px-6 py-3 bg-white text-black rounded-lg hover:bg-white/90 transition"
-      >
-        Soutenir ce créateur
-      </button>
+      {/* ✅ Bouton don + tag */}
+      <div className="p-5 border border-white/15 rounded-lg">
+        <p className="opacity-90 mb-3">
+          Accès gratuit. Si vous le souhaitez, vous pouvez faire un don volontaire via
+          HelloAsso pour soutenir la création. (Ce n’est pas un achat.)
+        </p>
 
-      {/* Modale HelloAsso */}
-      {open && <DonModal onClose={() => setOpen(false)} />}
+        <button
+          onClick={() => setOpen(true)}
+          className="px-6 py-3 bg-white text-black rounded-lg hover:bg-white/90 transition"
+        >
+          Soutenir ce film
+        </button>
+
+        <p className="text-xs opacity-70 mt-3">
+          Préférence de soutien (facultatif) :{" "}
+          <span className="font-mono">{donationTag}</span>
+        </p>
+      </div>
+
+      {/* ✅ Modale HelloAsso (pré-remplie) */}
+      {open && (
+        <DonModal
+          onClose={() => setOpen(false)}
+          donationTag={donationTag}
+        />
+      )}
     </div>
   );
 }
