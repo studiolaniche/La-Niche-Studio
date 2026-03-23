@@ -28,7 +28,6 @@ function getActors(film) {
   return Array.from({ length: 15 }, (_, i) => film[`ACTEUR${i + 1}`]).filter(Boolean);
 }
 
-// ✅ Tag stable : NOMDUFILM_REFERENCE (ex: GUM_2)
 function buildDonationTag(film) {
   const baseRaw = film.NOMDUFILM || film.TITRE || "FILM";
 
@@ -60,6 +59,7 @@ export default function Projet() {
   const vimeoId = extractVimeoId(film.VIMEOID);
   const directors = getDirectors(film);
   const actors = getActors(film);
+  const collectif = film.COLLECTIF || "";
   const duration =
     (film.DUREE &&
       String(film.DUREE).match(/\d+/) &&
@@ -166,6 +166,20 @@ export default function Projet() {
                   {a}
                 </Link>
               ))}
+            </div>
+          </div>
+        )}
+
+        {collectif && (
+          <div>
+            <h3 className="text-sm font-semibold text-white/80 mb-2">Collectif</h3>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to={`/catalogue?collectif=${encodeURIComponent(collectif)}`}
+                className="px-2 py-1 rounded text-xs transition bg-fuchsia-600/80 hover:bg-fuchsia-500 text-white"
+              >
+                {collectif}
+              </Link>
             </div>
           </div>
         )}
