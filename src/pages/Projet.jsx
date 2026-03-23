@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useState } from "react";
 import useFilms from "../hooks/useFilms";
 import DonModal from "../components/DonModal";
@@ -29,14 +29,12 @@ function getActors(film) {
 }
 
 // ✅ Tag stable : NOMDUFILM_REFERENCE (ex: GUM_2)
-// - base = NOMDUFILM (ou TITRE si NOMDUFILM vide)
-// - reference = REFERENCE (nombre dans ta sheet)
 function buildDonationTag(film) {
   const baseRaw = film.NOMDUFILM || film.TITRE || "FILM";
 
   const base = String(baseRaw)
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // supprime accents
+    .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
     .trim()
     .replace(/[^A-Z0-9]+/g, "_")
@@ -68,19 +66,16 @@ export default function Projet() {
       `${String(film.DUREE).match(/\d+/)[0]} min`) ||
     null;
 
-  // 🖼️ Gestion robuste de la miniature
   const miniature = film.MINIATURE
     ? film.MINIATURE.includes("/miniatures/")
       ? film.MINIATURE
       : `/miniatures/${film.MINIATURE}`
     : "/miniatures/placeholder.jpg";
 
-  // ✅ Tag de don (ex: GUM_2)
   const donationTag = buildDonationTag(film);
 
   return (
     <div className="px-4 md:px-8 py-8 max-w-5xl mx-auto text-white">
-      {/* 🧭 Fil d’Ariane */}
       <Breadcrumb
         items={[
           { label: "Accueil", href: "/" },
@@ -89,7 +84,6 @@ export default function Projet() {
         ]}
       />
 
-      {/* Titre + méta */}
       <h1 className="text-3xl md:text-4xl font-bold mb-2">{film.TITRE}</h1>
       <p className="mb-6 text-gray-300">
         {directors.join(" & ")}
@@ -98,7 +92,6 @@ export default function Projet() {
         {film.GENRE ? ` • ${film.GENRE}` : ""}
       </p>
 
-      {/* Lecteur Vimeo ou miniature */}
       {vimeoId ? (
         <div className="mb-8 aspect-video w-full overflow-hidden rounded-lg bg-black">
           <iframe
@@ -122,7 +115,6 @@ export default function Projet() {
         </div>
       )}
 
-      {/* Synopsis */}
       {film.SYNOPSIS && (
         <section className="mb-6">
           <h2 className="text-xl font-semibold mb-2">Synopsis</h2>
@@ -132,7 +124,6 @@ export default function Projet() {
         </section>
       )}
 
-      {/* (Optionnel) Description */}
       {film.DESCRIPTION && (
         <section className="mb-6">
           <h3 className="text-lg font-semibold mb-2">Note d’intention</h3>
@@ -142,7 +133,6 @@ export default function Projet() {
         </section>
       )}
 
-      {/* Fiche technique rapide */}
       <div className="mb-8 grid sm:grid-cols-2 gap-6">
         {directors.length > 0 && (
           <div>
@@ -151,9 +141,13 @@ export default function Projet() {
             </h3>
             <div className="flex flex-wrap gap-2">
               {directors.map((d, i) => (
-                <span key={i} className="px-2 py-1 bg-white/10 rounded text-xs">
+                <Link
+                  key={`${d}-${i}`}
+                  to={`/catalogue?realisateur=${encodeURIComponent(d)}`}
+                  className="px-2 py-1 bg-white/10 rounded text-xs hover:bg-white/20 transition"
+                >
                   {d}
-                </span>
+                </Link>
               ))}
             </div>
           </div>
@@ -164,9 +158,13 @@ export default function Projet() {
             <h3 className="text-sm font-semibold text-white/80 mb-2">Acteurs</h3>
             <div className="flex flex-wrap gap-2">
               {actors.map((a, i) => (
-                <span key={i} className="px-2 py-1 bg-white/5 rounded text-xs">
+                <Link
+                  key={`${a}-${i}`}
+                  to={`/catalogue?acteur=${encodeURIComponent(a)}`}
+                  className="px-2 py-1 bg-white/5 rounded text-xs hover:bg-white/15 transition"
+                >
                   {a}
-                </span>
+                </Link>
               ))}
             </div>
           </div>
@@ -204,7 +202,6 @@ export default function Projet() {
         )}
       </div>
 
-      {/* ✅ Bouton don + tag */}
       <div className="p-5 border border-white/15 rounded-lg">
         <p className="opacity-90 mb-3">
           Accès gratuit. Si vous le souhaitez, vous pouvez faire un don volontaire via
@@ -224,7 +221,6 @@ export default function Projet() {
         </p>
       </div>
 
-      {/* ✅ Modale HelloAsso (pré-remplie) */}
       {open && (
         <DonModal
           onClose={() => setOpen(false)}
