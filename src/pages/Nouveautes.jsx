@@ -1,21 +1,32 @@
-import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import useFilms from "../hooks/useFilms";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import useFilms from "../hooks/useFilms";
 import Breadcrumb from "../components/Breadcrumb";
+
+const ROTATION_MS = 8000;
+const FADE_MS = 900;
+
+function getDirectors(film) {
+  return [film["REALISATEUR 1"], film["REALISATEUR 2"]].filter(Boolean);
+}
+
+function getActors(film) {
+  return Array.from({ length: 15 }, (_, i) => film[`ACTEUR${i + 1}`]).filter(
+    Boolean
+  );
+}
 
 export default function Nouveautes() {
   const { data: rawFilms = [], isLoading: loading } = useFilms();
-  const [index, setIndex] = useState(0);
   const navigate = useNavigate();
 
-  // 🎬 On filtre uniquement les films avec un STATUS (mise en avant)
   const films = useMemo(() => {
     return rawFilms
-      .filter((f) => f.STATUS && f.STATUS.trim() !== "")
+      .filter((f) => f.STATUS && String(f.STATUS).trim() !== "")
       .map((f) => {
         const miniature = f.MINIATURE
-          ? f.MINIATURE.includes("/miniatures/")
+          ? String(f.MINIATURE).includes("/miniatures/")
             ? f.MINIATURE
             : `/miniatures/${f.MINIATURE}`
           : f.VIMEOID
@@ -23,51 +34,141 @@ export default function Nouveautes() {
           : "/miniatures/placeholder.jpg";
 
         return {
+          ...f,
           id: f.ID,
-          titre: f.TITRE,
-          annee: f.ANNEE,
-          real1: f["REALISATEUR 1"],
-          real2: f["REALISATEUR 2"],
+          titre: f.TITRE || "Sans titre",
+          annee: f.ANNEE || "",
           miniature,
           synopsis: f.SYNOPSIS || "",
-          vimeoId: f.VIMEOID,
-          status: f.STATUS,
+          status: String(f.STATUS).trim(),
+          directors: getDirectors(f),
+          actors: getActors(f),
+          collectif: f.COLLECTIF || "",
         };
       });
   }, [rawFilms]);
 
-  // 🔄 Rotation automatique toutes les 8s
-  useEffect(() => {
-    if (films.length > 1) {
-      const timer = setInterval(
-        () => setIndex((i) => (i + 1) % films.length),
-        8000
-      );
-      return () => clearInterval(timer);
-    }
-  }, [films.length]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [previousIndex, setPreviousIndex] = useState(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
-  if (loading) return <p className="p-8">Chargement…</p>;
-  if (!films.length)
+  const transitionTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (films.length > 0 && currentIndex >= films.length) {
+      setCurrentIndex(0);
+      setPreviousIndex(null);
+      setIsTransitioning(false);
+    }
+  }, [films.length, currentIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const goToIndex = (nextIndex) => {
+    if (!films.length) return;
+    if (nextIndex === currentIndex) return;
+
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+
+    setPreviousIndex(currentIndex);
+    setCurrentIndex(nextIndex);
+    setIsTransitioning(true);
+
+    transitionTimeoutRef.current = setTimeout(() => {
+      setPreviousIndex(null);
+      setIsTransitioning(false);
+    }, FADE_MS);
+  };
+
+  const goToPrev = () => {
+    if (films.length <= 1) return;
+    const nextIndex = (currentIndex - 1 + films.length) % films.length;
+    goToIndex(nextIndex);
+  };
+
+  const goToNext = () => {
+    if (films.length <= 1) return;
+    const nextIndex = (currentIndex + 1) % films.length;
+    goToIndex(nextIndex);
+  };
+
+  useEffect(() => {
+    if (films.length <= 1) return;
+    if (isTransitioning) return;
+
+    const interval = setInterval(() => {
+      setPreviousIndex(currentIndex);
+      setCurrentIndex((prev) => (prev + 1) % films.length);
+      setIsTransitioning(true);
+    }, ROTATION_MS);
+
+    return () => clearInterval(interval);
+  }, [films.length, currentIndex, isTransitioning]);
+
+  useEffect(() => {
+    if (!isTransitioning) return;
+
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+
+    transitionTimeoutRef.current = setTimeout(() => {
+      setPreviousIndex(null);
+      setIsTransitioning(false);
+    }, FADE_MS);
+
+    return () => {
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, [isTransitioning]);
+
+  if (loading) {
     return (
-      <div className="p-8">
+      <div className="min-h-[calc(100vh-4rem)] bg-black text-white p-8">
         <Breadcrumb
           items={[
             { label: "Accueil", href: "/" },
             { label: "Nouveautés" },
           ]}
         />
-        <p>Aucun film à la une pour l’instant.</p>
+        <p className="mt-6 text-white/70">Chargement…</p>
       </div>
     );
+  }
 
-  const film = films[index];
-  const realisateurs = [film.real1, film.real2].filter(Boolean).join(" & ");
+  if (!films.length) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-black text-white p-8">
+        <Breadcrumb
+          items={[
+            { label: "Accueil", href: "/" },
+            { label: "Nouveautés" },
+          ]}
+        />
+        <p className="mt-6 text-white/70">Aucun film à la une pour l’instant.</p>
+      </div>
+    );
+  }
+
+  const currentFilm = films[currentIndex];
+  const previousFilm =
+    previousIndex !== null && films[previousIndex] ? films[previousIndex] : null;
+
+  const realisateurs = currentFilm.directors.join(" & ");
 
   return (
-    <div className="relative w-full min-h-[calc(100vh-4rem)] overflow-hidden bg-black text-white">
-      {/* 🧭 Fil d’Ariane */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-4 md:p-8">
+    <div className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-black text-white">
+      <div className="absolute top-0 left-0 right-0 z-30 p-4 md:p-8">
         <Breadcrumb
           items={[
             { label: "Accueil", href: "/" },
@@ -76,85 +177,193 @@ export default function Nouveautes() {
         />
       </div>
 
-      {/* 🖼️ Image de fond */}
-      {film.miniature ? (
+      {/* Background */}
+      <div className="absolute inset-0">
+        {previousFilm && (
+          <img
+            src={previousFilm.miniature}
+            alt={previousFilm.titre}
+            className="absolute inset-0 h-full w-full object-cover opacity-100"
+            loading="lazy"
+            decoding="async"
+          />
+        )}
+
         <img
-          src={film.miniature}
-          alt={film.titre}
-          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 opacity-100"
+          key={currentFilm.id}
+          src={currentFilm.miniature}
+          alt={currentFilm.titre}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity ease-out ${
+            isTransitioning ? "opacity-0" : "opacity-100"
+          }`}
+          style={{ transitionDuration: `${FADE_MS}ms` }}
           loading="lazy"
           decoding="async"
         />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/5 text-white/70">
-          ⚠️ Pas de miniature
-        </div>
-      )}
 
-      <div className="absolute inset-0 bg-black/60" />
-
-      {/* 📜 Contenu du film mis en avant */}
-      <div className="absolute inset-0 flex flex-col justify-center items-center text-center px-6">
-        {/* ✅ Pastille cliquable redirige vers le catalogue filtré */}
-        {film.status && (
-          <div
-            onClick={() =>
-              navigate(`/catalogue?status=${encodeURIComponent(film.status)}`)
-            }
-            className="mb-4 inline-block bg-white/20 px-4 py-1 rounded-full text-sm font-semibold uppercase tracking-wide cursor-pointer hover:bg-white/30 transition"
-          >
-            {film.status}
-          </div>
-        )}
-
-        <h1 className="text-5xl md:text-6xl font-bold mb-4">{film.titre}</h1>
-        <p className="text-lg opacity-80 mb-4">
-          {realisateurs} {film.annee && ` — ${film.annee}`}
-        </p>
-
-        {film.synopsis && (
-          <div className="max-w-3xl max-h-60 md:max-h-72 overflow-y-auto px-4 mb-6 text-base leading-relaxed opacity-90 whitespace-pre-line">
-            {film.synopsis}
-          </div>
-        )}
-
-        <a
-          href={`/projet/${film.id}`}
-          className="mt-4 px-6 py-3 bg-white text-black rounded hover:bg-white/90 transition"
-        >
-          Regarder
-        </a>
+        <div className="absolute inset-0 bg-black/55" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/35" />
       </div>
 
-      {/* 🔁 Boutons navigation carrousel */}
-      {films.length > 1 && (
-        <>
-          <button
-            onClick={() => setIndex((i) => (i - 1 + films.length) % films.length)}
-            className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-black/60 rounded-full"
-          >
-            <ChevronLeft className="w-8 h-8 text-white" />
-          </button>
-          <button
-            onClick={() => setIndex((i) => (i + 1) % films.length)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-black/60 rounded-full"
-          >
-            <ChevronRight className="w-8 h-8 text-white" />
-          </button>
-        </>
-      )}
-
-      {/* 🔘 Indicateurs */}
-      {films.length > 1 && (
-        <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-2">
-          {films.map((_, i) => (
+      {/* Content */}
+      <div className="relative z-20 flex min-h-[calc(100vh-4rem)] items-end md:items-center">
+        <div className="w-full px-6 pb-16 pt-28 md:px-12 md:pb-20">
+          <div className="mx-auto max-w-6xl">
             <div
-              key={i}
-              className={`h-1.5 w-8 rounded-full transition-all duration-300 ${
-                i === index ? "bg-white scale-110" : "bg-white/30"
+              className={`max-w-4xl transition-all ease-out ${
+                isTransitioning
+                  ? "translate-y-2 opacity-0"
+                  : "translate-y-0 opacity-100"
               }`}
-            />
-          ))}
+              style={{ transitionDuration: `${Math.max(500, FADE_MS - 100)}ms` }}
+            >
+              {currentFilm.status && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/catalogue?status=${encodeURIComponent(currentFilm.status)}`
+                    )
+                  }
+                  className="mb-5 inline-flex items-center rounded-full border border-white/20 bg-white/12 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-white backdrop-blur-sm transition hover:bg-white/20"
+                >
+                  {currentFilm.status}
+                </button>
+              )}
+
+              <h1 className="text-4xl font-semibold leading-none md:text-6xl md:leading-none">
+                {currentFilm.titre}
+              </h1>
+
+              {(realisateurs || currentFilm.annee) && (
+                <p className="mt-4 text-sm text-white/75 md:text-base">
+                  {realisateurs}
+                  {realisateurs && currentFilm.annee ? " — " : ""}
+                  {currentFilm.annee}
+                </p>
+              )}
+
+              {currentFilm.synopsis && (
+                <div className="mt-6 max-w-2xl text-sm leading-relaxed text-white/88 md:text-base">
+                  <p className="whitespace-pre-line line-clamp-6 md:line-clamp-none">
+                    {currentFilm.synopsis}
+                  </p>
+                </div>
+              )}
+
+              {/* Pastilles navigation */}
+              <div className="mt-6 flex flex-col gap-4">
+                {currentFilm.directors.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-white/55">
+                      Réalisateur·ice·s
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {currentFilm.directors.map((d, i) => (
+                        <Link
+                          key={`${d}-${i}`}
+                          to={`/catalogue?realisateur=${encodeURIComponent(d)}`}
+                          className="rounded-full bg-white/12 px-3 py-1.5 text-xs text-white transition hover:bg-white/22"
+                        >
+                          {d}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {currentFilm.actors.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-white/55">
+                      Acteurs
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {currentFilm.actors.slice(0, 8).map((a, i) => (
+                        <Link
+                          key={`${a}-${i}`}
+                          to={`/catalogue?acteur=${encodeURIComponent(a)}`}
+                          className="rounded-full bg-white/7 px-3 py-1.5 text-xs text-white transition hover:bg-white/15"
+                        >
+                          {a}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {currentFilm.collectif && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-white/55">
+                      Collectif
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        to={`/catalogue?collectif=${encodeURIComponent(
+                          currentFilm.collectif
+                        )}`}
+                        className="rounded-full bg-fuchsia-600/80 px-3 py-1.5 text-xs text-white transition hover:bg-fuchsia-500"
+                      >
+                        {currentFilm.collectif}
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/projet/${currentFilm.id}`)}
+                  className="rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition hover:bg-white/90"
+                >
+                  Regarder
+                </button>
+
+                {films.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={goToPrev}
+                      aria-label="Film précédent"
+                      className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/25 backdrop-blur-sm transition hover:bg-black/45"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={goToNext}
+                      aria-label="Film suivant"
+                      className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/25 backdrop-blur-sm transition hover:bg-black/45"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Dots */}
+      {films.length > 1 && (
+        <div className="absolute bottom-6 left-0 right-0 z-30 px-6">
+          <div className="mx-auto flex max-w-6xl items-center justify-center gap-2 md:justify-start">
+            {films.map((item, i) => (
+              <button
+                key={item.id || i}
+                type="button"
+                onClick={() => goToIndex(i)}
+                aria-label={`Aller au film ${i + 1}`}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === currentIndex
+                    ? "w-10 bg-white"
+                    : "w-6 bg-white/30 hover:bg-white/50"
+                }`}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
