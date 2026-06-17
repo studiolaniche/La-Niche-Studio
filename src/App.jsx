@@ -5,7 +5,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-black text-white font-sans">
       <header className="sticky top-0 z-50 flex items-center justify-between border-b border-white/10 bg-black/80 px-6 py-4 backdrop-blur-md">
         <Link to="/" className="text-xl font-bold tracking-wide">
-          La Niche Studio
+          
         </Link>
 
         <nav className="flex space-x-6 text-sm md:text-base">
