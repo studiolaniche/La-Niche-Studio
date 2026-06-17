@@ -17,6 +17,8 @@
   mix-blend-mode: overlay;
   opacity: 0.35;
 }
-html, body {
+
+html,
+body {
   @apply bg-black text-white;
 }
