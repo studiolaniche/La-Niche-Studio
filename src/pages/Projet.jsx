@@ -3,13 +3,27 @@ import { useState } from "react";
 import useFilms from "../hooks/useFilms";
 import DonModal from "../components/DonModal";
 import Breadcrumb from "../components/Breadcrumb";
+import VimeoCustomPlayer from "../components/VimeoCustomPlayer";
 
 /* ---------- helpers ---------- */
-function extractVimeoId(value) {
+function extractVimeoInfo(value) {
   if (!value) return null;
-  if (/^\d+$/.test(value)) return value;
-  const match = String(value).match(/vimeo\.com\/(?:video\/)?(\d+)/i);
-  return match ? match[1] : null;
+
+  const raw = String(value).trim();
+
+  if (/^\d+$/.test(raw)) {
+    return { id: raw, hash: "" };
+  }
+
+  const idMatch = raw.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+  if (!idMatch) return null;
+
+  const hashMatch = raw.match(/[?&]h=([^&]+)/i);
+
+  return {
+    id: idMatch[1],
+    hash: hashMatch ? hashMatch[1] : "",
+  };
 }
 
 function cleanQuotes(s) {
@@ -56,10 +70,11 @@ export default function Projet() {
   const film = films.find((f) => String(f.ID) === String(id));
   if (!film) return <p className="p-8">Film introuvable.</p>;
 
-  const vimeoId = extractVimeoId(film.VIMEOID);
+  const vimeoInfo = extractVimeoInfo(film.VIMEOID);
   const directors = getDirectors(film);
   const actors = getActors(film);
   const collectif = film.COLLECTIF || "";
+
   const duration =
     (film.DUREE &&
       String(film.DUREE).match(/\d+/) &&
@@ -85,6 +100,7 @@ export default function Projet() {
       />
 
       <h1 className="text-3xl md:text-4xl font-bold mb-2">{film.TITRE}</h1>
+
       <p className="mb-6 text-gray-300">
         {directors.join(" & ")}
         {film.ANNEE ? ` — ${film.ANNEE}` : ""}
@@ -92,18 +108,14 @@ export default function Projet() {
         {film.GENRE ? ` • ${film.GENRE}` : ""}
       </p>
 
-      {vimeoId ? (
-        <div className="mb-8 aspect-video w-full overflow-hidden rounded-lg bg-black">
-          <iframe
-            src={`https://player.vimeo.com/video/${vimeoId}?dnt=1&title=0&byline=0&portrait=0`}
-            width="100%"
-            height="100%"
-            frameBorder="0"
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-            title={film.TITRE}
-            className="w-full h-full"
-          />
+      {vimeoInfo ? (
+        <div className="mb-8">
+          <VimeoCustomPlayer
+           vimeoId={vimeoInfo.id}
+          vimeoHash={vimeoInfo.hash}
+          poster={miniature}
+         title={film.TITRE}
+/>
         </div>
       ) : (
         <div className="mb-8 aspect-video w-full rounded-lg bg-white/5 flex items-center justify-center text-white/70">
@@ -235,12 +247,7 @@ export default function Projet() {
         </p>
       </div>
 
-      {open && (
-        <DonModal
-          onClose={() => setOpen(false)}
-          donationTag={donationTag}
-        />
-      )}
+      {open && <DonModal onClose={() => setOpen(false)} donationTag={donationTag} />}
     </div>
   );
 }

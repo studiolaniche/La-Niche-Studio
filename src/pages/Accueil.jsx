@@ -14,10 +14,12 @@ const FALLBACK_THUMB = "/miniatures/placeholder.jpg";
 
 function getStableColor(text) {
   if (!text) return "#666";
+
   let hash = 0;
   for (let i = 0; i < text.length; i++) {
     hash = text.charCodeAt(i) + ((hash << 5) - hash);
   }
+
   const hue = Math.abs(hash) % 360;
   return `hsl(${hue}, 70%, 45%)`;
 }
@@ -60,6 +62,60 @@ async function preloadMany(sources = []) {
   const unique = [...new Set(sources.filter(Boolean))];
   if (!unique.length) return;
   await Promise.all(unique.map((src) => preloadImage(src)));
+}
+
+/* ---------------- popup aide bulles ---------------- */
+
+function BubbleHintPopup() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const alreadySeen = sessionStorage.getItem("bubbleHintSeen");
+
+    if (!alreadySeen) {
+      const timer = setTimeout(() => {
+        setVisible(true);
+      }, 1600);
+
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const close = () => {
+    sessionStorage.setItem("bubbleHintSeen", "true");
+    setVisible(false);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 max-w-[330px] rounded-2xl border border-white/15 bg-black/80 p-4 text-white shadow-2xl backdrop-blur-md">
+      <button
+        type="button"
+        onClick={close}
+        className="absolute right-3 top-2 text-xl leading-none text-white/50 transition hover:text-white"
+        aria-label="Fermer"
+      >
+        ×
+      </button>
+
+      <p className="pr-6 text-sm font-semibold leading-snug">
+        Astuce : les pastilles colorées sont cliquables.
+      </p>
+
+      <p className="mt-2 text-xs leading-relaxed text-white/70">
+        Cliquez sur les pastilles pour naviguer de film en film !
+      </p>
+
+      <button
+        type="button"
+        onClick={close}
+        className="mt-4 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black transition hover:bg-white/90"
+      >
+        Compris
+      </button>
+    </div>
+  );
 }
 
 /* ---------------- smooth color tile ---------------- */
@@ -174,7 +230,7 @@ function RotatingMediaTile({
     const delay = getStableDelay(slotIndex, 1800);
     let localTimer = null;
 
-    const run = async () => {
+    async function run() {
       await preloadImage(item.src);
       if (cancelled || transitionTokenRef.current !== token) return;
 
@@ -191,7 +247,7 @@ function RotatingMediaTile({
           });
         });
       }, delay);
-    };
+    }
 
     run();
 
@@ -232,10 +288,12 @@ function RotatingMediaTile({
       setActiveTile(slotIndex);
       return;
     }
+
     handleOpen();
   };
 
-  const statusLabel = displayedItem.status || (displayedItem.type === "film" ? "FILM" : "ÉDITO");
+  const statusLabel =
+    displayedItem.status || (displayedItem.type === "film" ? "FILM" : "ÉDITO");
 
   return (
     <button
@@ -332,7 +390,9 @@ function RotatingMediaTile({
             {displayedItem.real || ""}
           </p>
         ) : displayedItem.texte ? (
-          <p className="mt-1 line-clamp-3 text-sm text-gray-200">{displayedItem.texte}</p>
+          <p className="mt-1 line-clamp-3 text-sm text-gray-200">
+            {displayedItem.texte}
+          </p>
         ) : null}
 
         <div className="mt-3 flex items-center gap-2">
@@ -427,7 +487,9 @@ export default function Accueil() {
         id: film.ID,
         titre: film.TITRE || "",
         annee: film.ANNEE || "",
-        real: [film["REALISATEUR 1"], film["REALISATEUR 2"]].filter(Boolean).join(" & "),
+        real: [film["REALISATEUR 1"], film["REALISATEUR 2"]]
+          .filter(Boolean)
+          .join(" & "),
         src: `/miniatures/${film.MINIATURE}`,
         type: "film",
         priorite: parseInt(film.PRIORITE, 10) || 0,
@@ -462,7 +524,7 @@ export default function Accueil() {
       if (index === 2) {
         return {
           type: "subtitle",
-          content: "Découvrez des courts métrages indépendants et soutenez les créateurs.",
+          content: "La plateforme grenobloise du court-métrage indépendant !",
         };
       }
       if (index === 5) return { type: "text", content: "BAIE" };
@@ -531,13 +593,16 @@ export default function Accueil() {
       if (index === 2) {
         return {
           type: "subtitle",
-          content: "Découvrez des courts métrages indépendants et soutenez les créateurs.",
+          content: "La plateforme grenobloise du court-métrage indépendant !",
         };
       }
       if (index === 5) return { type: "text", content: "BAIE" };
       if (index === 10) return { type: "text", content: "VITRÉE" };
 
-      const item = allContent.length ? allContent[(offset + index) % allContent.length] : null;
+      const item = allContent.length
+        ? allContent[(offset + index) % allContent.length]
+        : null;
+
       return item || { type: "empty" };
     });
   }, [allContent, offset]);
@@ -607,7 +672,7 @@ export default function Accueil() {
                     Don volontaire
                   </span>
                   <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
-                    90/10
+                    Ouverte à tous
                   </span>
                 </div>
 
@@ -647,6 +712,8 @@ export default function Accueil() {
           return <div key={index} className="bg-black/25" />;
         })}
       </div>
+
+      <BubbleHintPopup />
     </div>
   );
 }
