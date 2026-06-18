@@ -15,9 +15,17 @@ import App from "./App.jsx";
 
 // Pages
 import Accueil from "./pages/Accueil.jsx";
+import Admin from "./pages/Admin.jsx";
+import AdminFilmNew from "./pages/AdminFilmNew.jsx";
+import AdminFilmEdit from "./pages/AdminFilmEdit.jsx";
+import AdminEditos from "./pages/AdminEditos.jsx";
+import AdminStats from "./pages/AdminStats.jsx";
+import AdminEditoNew from "./pages/AdminEditoNew.jsx";
 import Catalogue from "./pages/Catalogue.jsx";
 import Nouveautes from "./pages/Nouveautes.jsx";
 import Projet from "./pages/Projet.jsx";
+import Login from "./pages/Login.jsx";
+import MonEspace from "./pages/MonEspace.jsx";
 import Apropos from "./pages/Apropos.jsx";
 import Participer from "./pages/Participer.jsx";
 import CGU from "./pages/CGU.jsx";
@@ -39,9 +47,17 @@ const router = createBrowserRouter([
       { index: true, element: <Accueil /> },
 
       { path: "catalogue", element: <Catalogue /> },
+      { path: "admin", element: <Admin /> },
+      { path: "admin/films/new", element: <AdminFilmNew /> },
+      { path: "admin/films/:id/edit", element: <AdminFilmEdit /> },
+      { path: "admin/editos", element: <AdminEditos /> },
+      { path: "admin/stats", element: <AdminStats /> },
+      { path: "admin/editos/new", element: <AdminEditoNew /> },
       { path: "nouveautes", element: <Nouveautes /> },
       { path: "projet/:id", element: <Projet /> },
       { path: "participer", element: <Participer /> },
+      { path: "login", element: <Login /> },
+      { path: "mon-espace", element: <MonEspace /> },
       { path: "a-propos", element: <Apropos /> },
 
       // Anciennes pages redirigées vers Participer

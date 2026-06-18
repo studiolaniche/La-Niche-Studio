@@ -1,49 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import useFilms from "../hooks/useFilms";
+import useSupabaseFilms from "../hooks/useSupabaseFilms";
 import Breadcrumb from "../components/Breadcrumb";
 
 const ROTATION_MS = 8000;
 const FADE_MS = 900;
 
-function getDirectors(film) {
-  return [film["REALISATEUR 1"], film["REALISATEUR 2"]].filter(Boolean);
-}
-
-function getActors(film) {
-  return Array.from({ length: 15 }, (_, i) => film[`ACTEUR${i + 1}`]).filter(
-    Boolean
-  );
-}
-
 export default function Nouveautes() {
-  const { data: rawFilms = [], isLoading: loading } = useFilms();
+  const { films: rawFilms = [], loading } = useSupabaseFilms();
   const navigate = useNavigate();
 
-  const films = useMemo(() => {
-    return rawFilms
-      .filter((f) => f.STATUS && String(f.STATUS).trim() !== "")
-      .map((f) => {
-        const miniature = f.MINIATURE
-          ? String(f.MINIATURE).includes("/miniatures/")
-            ? f.MINIATURE
-            : `/miniatures/${f.MINIATURE}`
-          : f.VIMEOID
-          ? `https://vumbnail.com/${f.VIMEOID}.jpg`
-          : "/miniatures/placeholder.jpg";
+const films = useMemo(() => {
+  return rawFilms
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 6)
+    .map((film) => {
+        const miniature =
+          film.miniature_url ||
+          (film.vimeo_id
+            ? `https://vumbnail.com/${film.vimeo_id}.jpg`
+            : "/miniatures/placeholder.jpg");
 
         return {
-          ...f,
-          id: f.ID,
-          titre: f.TITRE || "Sans titre",
-          annee: f.ANNEE || "",
+          ...film,
+          id: film.id,
+          slug: film.slug,
+          titre: film.titre || "Sans titre",
+          annee: film.annee || "",
           miniature,
-          synopsis: f.SYNOPSIS || "",
-          status: String(f.STATUS).trim(),
-          directors: getDirectors(f),
-          actors: getActors(f),
-          collectif: f.COLLECTIF || "",
+          synopsis: film.synopsis || "",
+          status: film.status ? String(film.status).trim() : "Nouveau",
+          directors: [film.realisateur_1, film.realisateur_2].filter(Boolean),
+          collectif: film.collectif || "",
         };
       });
   }, [rawFilms]);
@@ -134,7 +124,7 @@ export default function Nouveautes() {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-black text-white p-8">
+      <div className="min-h-[calc(100vh-4rem)] bg-black p-8 text-white">
         <Breadcrumb
           items={[
             { label: "Accueil", href: "/" },
@@ -148,7 +138,7 @@ export default function Nouveautes() {
 
   if (!films.length) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-black text-white p-8">
+      <div className="min-h-[calc(100vh-4rem)] bg-black p-8 text-white">
         <Breadcrumb
           items={[
             { label: "Accueil", href: "/" },
@@ -168,7 +158,7 @@ export default function Nouveautes() {
 
   return (
     <div className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-black text-white">
-      <div className="absolute top-0 left-0 right-0 z-30 p-4 md:p-8">
+      <div className="absolute left-0 right-0 top-0 z-30 p-4 md:p-8">
         <Breadcrumb
           items={[
             { label: "Accueil", href: "/" },
@@ -177,7 +167,6 @@ export default function Nouveautes() {
         />
       </div>
 
-      {/* Background */}
       <div className="absolute inset-0">
         {previousFilm && (
           <img
@@ -205,7 +194,6 @@ export default function Nouveautes() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/35" />
       </div>
 
-      {/* Content */}
       <div className="relative z-20 flex min-h-[calc(100vh-4rem)] items-end md:items-center">
         <div className="w-full px-6 pb-16 pt-28 md:px-12 md:pb-20">
           <div className="mx-auto max-w-6xl">
@@ -231,7 +219,7 @@ export default function Nouveautes() {
                 </button>
               )}
 
-              <h1 className="text-4xl font-semibold leading-none md:text-6xl md:leading-none">
+              <h1 className="text-4xl font-semibold leading-none md:text-6xl">
                 {currentFilm.titre}
               </h1>
 
@@ -251,40 +239,23 @@ export default function Nouveautes() {
                 </div>
               )}
 
-              {/* Pastilles navigation */}
               <div className="mt-6 flex flex-col gap-4">
                 {currentFilm.directors.length > 0 && (
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-white/55">
                       Réalisateur·ice·s
                     </p>
+
                     <div className="flex flex-wrap gap-2">
-                      {currentFilm.directors.map((d, i) => (
+                      {currentFilm.directors.map((director, index) => (
                         <Link
-                          key={`${d}-${i}`}
-                          to={`/catalogue?realisateur=${encodeURIComponent(d)}`}
+                          key={`${director}-${index}`}
+                          to={`/catalogue?realisateur=${encodeURIComponent(
+                            director
+                          )}`}
                           className="rounded-full bg-white/12 px-3 py-1.5 text-xs text-white transition hover:bg-white/22"
                         >
-                          {d}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {currentFilm.actors.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-white/55">
-                      Acteurs
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {currentFilm.actors.slice(0, 8).map((a, i) => (
-                        <Link
-                          key={`${a}-${i}`}
-                          to={`/catalogue?acteur=${encodeURIComponent(a)}`}
-                          className="rounded-full bg-white/7 px-3 py-1.5 text-xs text-white transition hover:bg-white/15"
-                        >
-                          {a}
+                          {director}
                         </Link>
                       ))}
                     </div>
@@ -296,6 +267,7 @@ export default function Nouveautes() {
                     <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-white/55">
                       Collectif
                     </p>
+
                     <div className="flex flex-wrap gap-2">
                       <Link
                         to={`/catalogue?collectif=${encodeURIComponent(
@@ -313,7 +285,9 @@ export default function Nouveautes() {
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => navigate(`/projet/${currentFilm.id}`)}
+                  onClick={() =>
+                    navigate(`/projet/${currentFilm.slug || currentFilm.id}`)
+                  }
                   className="rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition hover:bg-white/90"
                 >
                   Regarder
@@ -346,18 +320,17 @@ export default function Nouveautes() {
         </div>
       </div>
 
-      {/* Dots */}
       {films.length > 1 && (
         <div className="absolute bottom-6 left-0 right-0 z-30 px-6">
           <div className="mx-auto flex max-w-6xl items-center justify-center gap-2 md:justify-start">
-            {films.map((item, i) => (
+            {films.map((item, index) => (
               <button
-                key={item.id || i}
+                key={item.id || index}
                 type="button"
-                onClick={() => goToIndex(i)}
-                aria-label={`Aller au film ${i + 1}`}
+                onClick={() => goToIndex(index)}
+                aria-label={`Aller au film ${index + 1}`}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === currentIndex
+                  index === currentIndex
                     ? "w-10 bg-white"
                     : "w-6 bg-white/30 hover:bg-white/50"
                 }`}

@@ -1,21 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import Papa from "papaparse";
-import useFilms from "../hooks/useFilms";
-
-const EDITO_CSV =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRji8-c6KyC6q2l3Qtb2-bRk-NZ8YKGqGOojjBQ829DlZK1Qj8zRlDL4KQmy7I5TbwhjhG2BmfPIps-/pub?output=csv";
+import { supabase } from "../lib/supabaseClient";
 
 const COLORS = ["#FF0054", "#0096FF", "#00C49A", "#FFB800", "#C83CB9"];
 const ROTATION_MS = 28000;
 const FALLBACK_THUMB = "/miniatures/placeholder.jpg";
 
-/* ---------------- helpers ---------------- */
-
 function getStableColor(text) {
   if (!text) return "#666";
-
   let hash = 0;
+
   for (let i = 0; i < text.length; i++) {
     hash = text.charCodeAt(i) + ((hash << 5) - hash);
   }
@@ -40,18 +34,12 @@ function isSameMedia(a, b) {
 
 function preloadImage(src) {
   return new Promise((resolve) => {
-    if (!src) {
-      resolve(false);
-      return;
-    }
+    if (!src) return resolve(false);
 
     const img = new Image();
     img.src = src;
 
-    if (img.complete) {
-      resolve(true);
-      return;
-    }
+    if (img.complete) return resolve(true);
 
     img.onload = () => resolve(true);
     img.onerror = () => resolve(false);
@@ -63,8 +51,6 @@ async function preloadMany(sources = []) {
   if (!unique.length) return;
   await Promise.all(unique.map((src) => preloadImage(src)));
 }
-
-/* ---------------- popup aide bulles ---------------- */
 
 function BubbleHintPopup() {
   const [visible, setVisible] = useState(false);
@@ -100,11 +86,11 @@ function BubbleHintPopup() {
       </button>
 
       <p className="pr-6 text-sm font-semibold leading-snug">
-        Astuce : les pastilles colorées sont cliquables.
+        Astuce : tout est cliquable !
       </p>
 
       <p className="mt-2 text-xs leading-relaxed text-white/70">
-        Cliquez sur les pastilles pour naviguer de film en film !
+        Cliquez sur les pastilles pour naviguer de film en film.
       </p>
 
       <button
@@ -117,8 +103,6 @@ function BubbleHintPopup() {
     </div>
   );
 }
-
-/* ---------------- smooth color tile ---------------- */
 
 function SmoothColorTile({
   children,
@@ -140,6 +124,7 @@ function SmoothColorTile({
 
     const startTimer = setTimeout(() => {
       if (cancelled) return;
+
       setOverlayColor(color);
 
       requestAnimationFrame(() => {
@@ -186,14 +171,12 @@ function SmoothColorTile({
         />
       )}
 
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.08),transparent_36%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.08),transparent_36%)]" />
 
       <div className={`relative z-10 h-full ${innerClassName}`}>{children}</div>
     </div>
   );
 }
-
-/* ---------------- rotating media tile ---------------- */
 
 function RotatingMediaTile({
   item,
@@ -232,6 +215,7 @@ function RotatingMediaTile({
 
     async function run() {
       await preloadImage(item.src);
+
       if (cancelled || transitionTokenRef.current !== token) return;
 
       localTimer = setTimeout(() => {
@@ -270,16 +254,21 @@ function RotatingMediaTile({
   }, [showNext, nextItem]);
 
   const displayedItem = nextItem || currentItem;
+
   if (!displayedItem) return <div className="bg-black/20" />;
 
   const handleOpen = () => {
     if (displayedItem.type === "film") {
-      navigate(`/projet/${displayedItem.id}`);
+      navigate(`/projet/${displayedItem.slug || displayedItem.id}`);
       return;
     }
 
     if (displayedItem.url && displayedItem.url !== "#") {
-      window.location.href = displayedItem.url;
+      if (displayedItem.url.startsWith("/")) {
+        navigate(displayedItem.url);
+      } else {
+        window.location.href = displayedItem.url;
+      }
     }
   };
 
@@ -317,9 +306,7 @@ function RotatingMediaTile({
             loading="lazy"
             decoding="async"
             onError={(e) => {
-              if (e.currentTarget.src !== window.location.origin + FALLBACK_THUMB) {
-                e.currentTarget.src = FALLBACK_THUMB;
-              }
+              e.currentTarget.src = FALLBACK_THUMB;
             }}
             className={[
               "absolute inset-0 h-full w-full object-cover",
@@ -327,7 +314,6 @@ function RotatingMediaTile({
               "will-change-[opacity,transform] [transform:translateZ(0)]",
               showNext ? "opacity-0 scale-[1.02]" : "opacity-95 scale-100",
             ].join(" ")}
-            style={{ backfaceVisibility: "hidden" }}
           />
         )}
 
@@ -338,9 +324,7 @@ function RotatingMediaTile({
             loading="eager"
             decoding="async"
             onError={(e) => {
-              if (e.currentTarget.src !== window.location.origin + FALLBACK_THUMB) {
-                e.currentTarget.src = FALLBACK_THUMB;
-              }
+              e.currentTarget.src = FALLBACK_THUMB;
             }}
             className={[
               "absolute inset-0 h-full w-full object-cover",
@@ -348,7 +332,6 @@ function RotatingMediaTile({
               "will-change-[opacity,transform] [transform:translateZ(0)]",
               showNext ? "opacity-95 scale-100" : "opacity-0 scale-[1.04]",
             ].join(" ")}
-            style={{ backfaceVisibility: "hidden" }}
           />
         )}
       </div>
@@ -361,9 +344,9 @@ function RotatingMediaTile({
         ].join(" ")}
       />
 
-      {displayedItem.type === "edito" && statusLabel && (
+      {statusLabel && (
         <div
-          className="absolute top-3 left-3 z-30 rounded-full border border-white/10 px-3 py-1 text-xs font-bold text-white shadow-md"
+          className="absolute left-3 top-3 z-30 rounded-full border border-white/10 px-3 py-1 text-xs font-bold text-white shadow-md"
           style={{ backgroundColor: getStableColor(statusLabel) }}
         >
           {statusLabel}
@@ -411,53 +394,84 @@ function RotatingMediaTile({
   );
 }
 
-/* ---------------- loading screen ---------------- */
-
 function LoadingLanding() {
   return (
     <div className="relative min-h-[calc(100vh-4rem)] w-full bg-black">
       <div className="grid h-[calc(100vh-4rem)] w-full grid-cols-1 grid-rows-3 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 12 }).map((_, i) => {
-          const isTitle = i === 0 || i === 5 || i === 10 || i === 2;
-
-          return (
-            <div
-              key={i}
-              className={[
-                "relative overflow-hidden border border-white/5",
-                isTitle ? "bg-white/8" : "bg-white/[0.04]",
-              ].join(" ")}
-            >
-              <div className="absolute inset-0 animate-pulse bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.06),transparent)]" />
-            </div>
-          );
-        })}
+        {Array.from({ length: 12 }).map((_, index) => (
+          <div
+            key={index}
+            className="relative overflow-hidden border border-white/5 bg-white/[0.04]"
+          >
+            <div className="absolute inset-0 animate-pulse bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.06),transparent)]" />
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-/* ---------------- main component ---------------- */
-
 export default function Accueil() {
   const navigate = useNavigate();
-  const { data: films = [], loading: filmsLoading } = useFilms();
+
+  const [films, setFilms] = useState([]);
+  const [filmsLoading, setFilmsLoading] = useState(true);
 
   const [editos, setEditos] = useState([]);
   const [editosLoading, setEditosLoading] = useState(true);
-  const [initialReady, setInitialReady] = useState(false);
 
+  const [initialReady, setInitialReady] = useState(false);
   const [tick, setTick] = useState(0);
   const [activeTile, setActiveTile] = useState(null);
+
+  useEffect(() => {
+    async function fetchFilms() {
+      try {
+        setFilmsLoading(true);
+
+        const { data, error } = await supabase
+          .from("films")
+          .select("*")
+          .eq("is_published", true)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Erreur Supabase films :", error);
+          setFilms([]);
+          return;
+        }
+
+        setFilms(data || []);
+      } catch (error) {
+        console.error("Erreur chargement films :", error);
+        setFilms([]);
+      } finally {
+        setFilmsLoading(false);
+      }
+    }
+
+    fetchFilms();
+  }, []);
 
   useEffect(() => {
     async function fetchEditos() {
       try {
         setEditosLoading(true);
-        const res = await fetch(EDITO_CSV);
-        const text = await res.text();
-        const parsed = Papa.parse(text, { header: true }).data || [];
-        setEditos(parsed);
+
+        const { data, error } = await supabase
+          .from("editos")
+          .select("*")
+          .eq("is_published", true)
+          .order("poids", { ascending: false })
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Erreur Supabase éditos :", error);
+          setEditos([]);
+          return;
+        }
+
+        setEditos(data || []);
       } catch (error) {
         console.error("Erreur chargement éditos :", error);
         setEditos([]);
@@ -481,35 +495,34 @@ export default function Accueil() {
   }, []);
 
   const formattedFilms = useMemo(() => {
-    return films
-      .filter((film) => film?.MINIATURE)
-      .map((film) => ({
-        id: film.ID,
-        titre: film.TITRE || "",
-        annee: film.ANNEE || "",
-        real: [film["REALISATEUR 1"], film["REALISATEUR 2"]]
-          .filter(Boolean)
-          .join(" & "),
-        src: `/miniatures/${film.MINIATURE}`,
-        type: "film",
-        priorite: parseInt(film.PRIORITE, 10) || 0,
-        status: film.STATUS || "",
-      }));
+    return films.map((film) => ({
+      id: film.id,
+      slug: film.slug,
+      titre: film.titre || "",
+      annee: film.annee || "",
+      real: [film.realisateur_1, film.realisateur_2].filter(Boolean).join(" & "),
+      src:
+        film.miniature_url ||
+        (film.vimeo_id
+          ? `https://vumbnail.com/${film.vimeo_id}.jpg`
+          : FALLBACK_THUMB),
+      type: "film",
+      priorite: 0,
+      status: film.status || "FILM",
+    }));
   }, [films]);
 
   const formattedEditos = useMemo(() => {
-    return editos
-      .filter((edito) => edito?.TITRE || edito?.TEXTE)
-      .map((edito) => ({
-        id: edito.ID,
-        titre: edito.TITRE || "",
-        texte: edito.TEXTE || "",
-        src: edito.IMAGE ? `/edito/${edito.IMAGE}` : FALLBACK_THUMB,
-        url: edito.URL || "#",
-        type: "edito",
-        priorite: parseInt(edito.PRIORITE, 10) || 0,
-        status: edito.STATUS || "",
-      }));
+    return editos.map((edito) => ({
+      id: edito.id,
+      titre: edito.titre || "",
+      texte: edito.texte || "",
+      src: edito.image_url || FALLBACK_THUMB,
+      url: edito.url || "#",
+      type: "edito",
+      priorite: Number(edito.poids) || 0,
+      status: edito.status || "ÉDITO",
+    }));
   }, [editos]);
 
   const allContent = useMemo(() => {
@@ -521,12 +534,14 @@ export default function Accueil() {
   const baseGridItems = useMemo(() => {
     return Array.from({ length: 12 }).map((_, index) => {
       if (index === 0) return { type: "text", content: "LA" };
+
       if (index === 2) {
         return {
           type: "subtitle",
           content: "La plateforme grenobloise du court-métrage indépendant !",
         };
       }
+
       if (index === 5) return { type: "text", content: "BAIE" };
       if (index === 10) return { type: "text", content: "VITRÉE" };
 
@@ -539,12 +554,7 @@ export default function Accueil() {
     let cancelled = false;
 
     async function prepareInitialRender() {
-      const dataReady =
-        !filmsLoading &&
-        !editosLoading &&
-        formattedFilms.length > 0 &&
-        formattedEditos.length > 0 &&
-        allContent.length > 0;
+      const dataReady = !filmsLoading && !editosLoading && allContent.length > 0;
 
       if (!dataReady) return;
 
@@ -565,14 +575,7 @@ export default function Accueil() {
     return () => {
       cancelled = true;
     };
-  }, [
-    filmsLoading,
-    editosLoading,
-    formattedFilms.length,
-    formattedEditos.length,
-    allContent.length,
-    baseGridItems,
-  ]);
+  }, [filmsLoading, editosLoading, allContent.length, baseGridItems]);
 
   useEffect(() => {
     if (!initialReady) return;
@@ -590,12 +593,14 @@ export default function Accueil() {
   const gridItems = useMemo(() => {
     return Array.from({ length: 12 }).map((_, index) => {
       if (index === 0) return { type: "text", content: "LA" };
+
       if (index === 2) {
         return {
           type: "subtitle",
           content: "La plateforme grenobloise du court-métrage indépendant !",
         };
       }
+
       if (index === 5) return { type: "text", content: "BAIE" };
       if (index === 10) return { type: "text", content: "VITRÉE" };
 
@@ -619,11 +624,7 @@ export default function Accueil() {
   }, [gridItems, initialReady]);
 
   const showLoader =
-    !initialReady ||
-    filmsLoading ||
-    editosLoading ||
-    !formattedFilms.length ||
-    !formattedEditos.length;
+    !initialReady || filmsLoading || editosLoading || !allContent.length;
 
   if (showLoader) {
     return <LoadingLanding />;

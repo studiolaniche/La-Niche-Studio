@@ -1,11 +1,10 @@
 import { Link, useParams } from "react-router-dom";
-import { useState } from "react";
-import useFilms from "../hooks/useFilms";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import DonModal from "../components/DonModal";
 import Breadcrumb from "../components/Breadcrumb";
 import VimeoCustomPlayer from "../components/VimeoCustomPlayer";
 
-/* ---------- helpers ---------- */
 function extractVimeoInfo(value) {
   if (!value) return null;
 
@@ -28,22 +27,15 @@ function extractVimeoInfo(value) {
 
 function cleanQuotes(s) {
   if (!s) return "";
+
   return String(s)
     .trim()
     .replace(/^["'“”«»\s]+/, "")
     .replace(/["'“”«»\s]+$/, "");
 }
 
-function getDirectors(film) {
-  return [film["REALISATEUR 1"], film["REALISATEUR 2"]].filter(Boolean);
-}
-
-function getActors(film) {
-  return Array.from({ length: 15 }, (_, i) => film[`ACTEUR${i + 1}`]).filter(Boolean);
-}
-
 function buildDonationTag(film) {
-  const baseRaw = film.NOMDUFILM || film.TITRE || "FILM";
+  const baseRaw = film.tag_don || film.nom_du_film || film.titre || "FILM";
 
   const base = String(baseRaw)
     .normalize("NFD")
@@ -54,200 +46,249 @@ function buildDonationTag(film) {
     .replace(/^_+|_+$/g, "")
     .replace(/_+/g, "_");
 
-  const ref = Number.isFinite(Number(film.REFERENCE)) ? Number(film.REFERENCE) : 1;
+  const ref = film.reference || "1";
 
   return `${base}_${ref}`;
 }
 
-/* ---------- page ---------- */
 export default function Projet() {
   const { id } = useParams();
-  const { data: films = [], isLoading: loading } = useFilms();
+
+  const [film, setFilm] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    async function loadFilm() {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("films")
+        .select("*")
+        .eq("is_published", true)
+        .eq("slug", id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erreur chargement film :", error);
+        setFilm(null);
+      } else {
+        setFilm(data || null);
+      }
+
+      setLoading(false);
+    }
+
+    loadFilm();
+  }, [id]);
+
+  useEffect(() => {
+    if (!film?.id) return;
+
+    async function recordView() {
+      try {
+        let sessionId = localStorage.getItem("lbv_session_id");
+
+        if (!sessionId) {
+          sessionId = crypto.randomUUID();
+          localStorage.setItem("lbv_session_id", sessionId);
+        }
+
+        const viewKey = `lbv_view_${film.id}`;
+        const lastView = localStorage.getItem(viewKey);
+        const now = Date.now();
+
+        // Évite de compter 15 vues si quelqu’un recharge la page plusieurs fois.
+        // Ici : 1 vue max par film toutes les 30 minutes pour une même session.
+        if (lastView && now - Number(lastView) < 30 * 60 * 1000) {
+          return;
+        }
+
+        const { error } = await supabase.from("film_views").insert({
+          film_id: film.id,
+          session_id: sessionId,
+          page_url: window.location.href,
+          user_agent: navigator.userAgent,
+        });
+
+        if (error) {
+          console.error("Erreur enregistrement vue :", error);
+          return;
+        }
+
+        localStorage.setItem(viewKey, String(now));
+      } catch (error) {
+        console.error("Erreur vue :", error);
+      }
+    }
+
+    recordView();
+  }, [film?.id]);
 
   if (loading) return <p className="p-8">Chargement…</p>;
 
-  const film = films.find((f) => String(f.ID) === String(id));
   if (!film) return <p className="p-8">Film introuvable.</p>;
 
-  const vimeoInfo = extractVimeoInfo(film.VIMEOID);
-  const directors = getDirectors(film);
-  const actors = getActors(film);
-  const collectif = film.COLLECTIF || "";
+  const vimeoInfo = extractVimeoInfo(film.vimeo_id);
+
+  const directors = [film.realisateur_1, film.realisateur_2].filter(Boolean);
 
   const duration =
-    (film.DUREE &&
-      String(film.DUREE).match(/\d+/) &&
-      `${String(film.DUREE).match(/\d+/)[0]} min`) ||
-    null;
+    film.duree && String(film.duree).match(/\d+/)
+      ? `${String(film.duree).match(/\d+/)[0]} min`
+      : film.duree || null;
 
-  const miniature = film.MINIATURE
-    ? film.MINIATURE.includes("/miniatures/")
-      ? film.MINIATURE
-      : `/miniatures/${film.MINIATURE}`
-    : "/miniatures/placeholder.jpg";
+  const miniature =
+    film.miniature_url ||
+    (film.vimeo_id
+      ? `https://vumbnail.com/${film.vimeo_id}.jpg`
+      : "/miniatures/placeholder.jpg");
 
   const donationTag = buildDonationTag(film);
 
   return (
-    <div className="px-4 md:px-8 py-8 max-w-5xl mx-auto text-white">
+    <div className="mx-auto max-w-5xl px-4 py-8 text-white md:px-8">
       <Breadcrumb
         items={[
           { label: "Accueil", href: "/" },
           { label: "Catalogue", href: "/catalogue" },
-          { label: film.TITRE },
+          { label: film.titre },
         ]}
       />
 
-      <h1 className="text-3xl md:text-4xl font-bold mb-2">{film.TITRE}</h1>
+      <h1 className="mb-2 text-3xl font-bold md:text-4xl">{film.titre}</h1>
 
       <p className="mb-6 text-gray-300">
         {directors.join(" & ")}
-        {film.ANNEE ? ` — ${film.ANNEE}` : ""}
+        {film.annee ? ` — ${film.annee}` : ""}
         {duration ? ` • ${duration}` : ""}
-        {film.GENRE ? ` • ${film.GENRE}` : ""}
+        {film.genre ? ` • ${film.genre}` : ""}
       </p>
 
       {vimeoInfo ? (
         <div className="mb-8">
           <VimeoCustomPlayer
-           vimeoId={vimeoInfo.id}
-          vimeoHash={vimeoInfo.hash}
-          poster={miniature}
-         title={film.TITRE}
-/>
+            vimeoId={vimeoInfo.id}
+            vimeoHash={vimeoInfo.hash}
+            poster={miniature}
+            title={film.titre}
+          />
         </div>
       ) : (
-        <div className="mb-8 aspect-video w-full rounded-lg bg-white/5 flex items-center justify-center text-white/70">
+        <div className="mb-8 flex aspect-video w-full items-center justify-center rounded-lg bg-white/5 text-white/70">
           <img
             src={miniature}
-            alt={film.TITRE}
-            className="w-full h-full object-cover rounded-lg opacity-80"
+            alt={film.titre}
+            className="h-full w-full rounded-lg object-cover opacity-80"
           />
         </div>
       )}
 
-      {film.SYNOPSIS && (
+      {film.synopsis && (
         <section className="mb-6">
-          <h2 className="text-xl font-semibold mb-2">Synopsis</h2>
-          <p className="leading-relaxed text-gray-200 whitespace-pre-line">
-            {cleanQuotes(film.SYNOPSIS)}
+          <h2 className="mb-2 text-xl font-semibold">Synopsis</h2>
+          <p className="whitespace-pre-line leading-relaxed text-gray-200">
+            {cleanQuotes(film.synopsis)}
           </p>
         </section>
       )}
 
-      {film.DESCRIPTION && (
-        <section className="mb-6">
-          <h3 className="text-lg font-semibold mb-2">Note d’intention</h3>
-          <p className="leading-relaxed text-gray-200 whitespace-pre-line">
-            {cleanQuotes(film.DESCRIPTION)}
-          </p>
-        </section>
-      )}
-
-      <div className="mb-8 grid sm:grid-cols-2 gap-6">
+      <div className="mb-8 grid gap-6 sm:grid-cols-2">
         {directors.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-white/80 mb-2">
+            <h3 className="mb-2 text-sm font-semibold text-white/80">
               Réalisateur·ice·s
             </h3>
+
             <div className="flex flex-wrap gap-2">
-              {directors.map((d, i) => (
+              {directors.map((director, index) => (
                 <Link
-                  key={`${d}-${i}`}
-                  to={`/catalogue?realisateur=${encodeURIComponent(d)}`}
-                  className="px-2 py-1 bg-white/10 rounded text-xs hover:bg-white/20 transition"
+                  key={`${director}-${index}`}
+                  to={`/catalogue?realisateur=${encodeURIComponent(director)}`}
+                  className="rounded bg-white/10 px-2 py-1 text-xs transition hover:bg-white/20"
                 >
-                  {d}
+                  {director}
                 </Link>
               ))}
             </div>
           </div>
         )}
 
-        {actors.length > 0 && (
+        {film.collectif && (
           <div>
-            <h3 className="text-sm font-semibold text-white/80 mb-2">Acteurs</h3>
-            <div className="flex flex-wrap gap-2">
-              {actors.map((a, i) => (
-                <Link
-                  key={`${a}-${i}`}
-                  to={`/catalogue?acteur=${encodeURIComponent(a)}`}
-                  className="px-2 py-1 bg-white/5 rounded text-xs hover:bg-white/15 transition"
-                >
-                  {a}
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
+            <h3 className="mb-2 text-sm font-semibold text-white/80">
+              Collectif
+            </h3>
 
-        {collectif && (
-          <div>
-            <h3 className="text-sm font-semibold text-white/80 mb-2">Collectif</h3>
             <div className="flex flex-wrap gap-2">
               <Link
-                to={`/catalogue?collectif=${encodeURIComponent(collectif)}`}
-                className="px-2 py-1 rounded text-xs transition bg-fuchsia-600/80 hover:bg-fuchsia-500 text-white"
+                to={`/catalogue?collectif=${encodeURIComponent(film.collectif)}`}
+                className="rounded bg-fuchsia-600/80 px-2 py-1 text-xs text-white transition hover:bg-fuchsia-500"
               >
-                {collectif}
+                {film.collectif}
               </Link>
             </div>
           </div>
         )}
 
-        {film.SELECTIONFESTIVAL && (
+        {film.selection_festival && (
           <div>
-            <h3 className="text-sm font-semibold text-white/80 mb-2">
+            <h3 className="mb-2 text-sm font-semibold text-white/80">
               Sélections
             </h3>
-            <p className="text-sm text-gray-200 whitespace-pre-line">
-              {cleanQuotes(film.SELECTIONFESTIVAL)}
+
+            <p className="whitespace-pre-line text-sm text-gray-200">
+              {cleanQuotes(film.selection_festival)}
             </p>
           </div>
         )}
 
-        {film.PRIXFESTIVAL && (
+        {film.prix_festival && (
           <div>
-            <h3 className="text-sm font-semibold text-white/80 mb-2">Prix</h3>
-            <p className="text-sm text-gray-200 whitespace-pre-line">
-              {cleanQuotes(film.PRIXFESTIVAL)}
+            <h3 className="mb-2 text-sm font-semibold text-white/80">Prix</h3>
+
+            <p className="whitespace-pre-line text-sm text-gray-200">
+              {cleanQuotes(film.prix_festival)}
             </p>
           </div>
         )}
 
-        {film.CHAINEDEDROITS && (
+        {film.chaine_de_droits && (
           <div className="sm:col-span-2">
-            <h3 className="text-sm font-semibold text-white/80 mb-2">
+            <h3 className="mb-2 text-sm font-semibold text-white/80">
               Chaîne de droits
             </h3>
-            <p className="text-sm text-gray-200 whitespace-pre-line">
-              {cleanQuotes(film.CHAINEDEDROITS)}
+
+            <p className="whitespace-pre-line text-sm text-gray-200">
+              {cleanQuotes(film.chaine_de_droits)}
             </p>
           </div>
         )}
       </div>
 
-      <div className="p-5 border border-white/15 rounded-lg">
-        <p className="opacity-90 mb-3">
-          Accès gratuit. Si vous le souhaitez, vous pouvez faire un don volontaire via
-          HelloAsso pour soutenir la création. (Ce n’est pas un achat.)
+      <div className="rounded-lg border border-white/15 p-5">
+        <p className="mb-3 opacity-90">
+          Accès gratuit. Si vous le souhaitez, vous pouvez faire un don volontaire
+          via HelloAsso pour soutenir la création. Ce n’est pas un achat.
         </p>
 
         <button
+          type="button"
           onClick={() => setOpen(true)}
-          className="px-6 py-3 bg-white text-black rounded-lg hover:bg-white/90 transition"
+          className="rounded-lg bg-white px-6 py-3 text-black transition hover:bg-white/90"
         >
           Soutenir ce film
         </button>
 
-        <p className="text-xs opacity-70 mt-3">
-          Préférence de soutien (facultatif) :{" "}
+        <p className="mt-3 text-xs opacity-70">
+          Préférence de soutien facultative :{" "}
           <span className="font-mono">{donationTag}</span>
         </p>
       </div>
 
-      {open && <DonModal onClose={() => setOpen(false)} donationTag={donationTag} />}
+      {open && (
+        <DonModal onClose={() => setOpen(false)} donationTag={donationTag} />
+      )}
     </div>
   );
 }
