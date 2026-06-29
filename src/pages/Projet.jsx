@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import DonModal from "../components/DonModal";
 import Breadcrumb from "../components/Breadcrumb";
+import WindowButton from "../components/WindowButton";
 import VimeoCustomPlayer from "../components/VimeoCustomPlayer";
 
 function extractVimeoInfo(value) {
@@ -265,7 +266,9 @@ export default function Projet() {
           </div>
         )}
       </div>
-
+<div className="mb-8">
+  <WindowButton filmId={film.id} />
+</div>
       <div className="rounded-lg border border-white/15 p-5">
         <p className="mb-3 opacity-90">
           Accès gratuit. Si vous le souhaitez, vous pouvez faire un don volontaire

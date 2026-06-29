@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
 function slugify(text) {
@@ -11,41 +11,40 @@ function slugify(text) {
     .replace(/(^-|-$)+/g, "");
 }
 
-export default function AdminEditoNew() {
+export default function AdminEditoEdit() {
+  const { id } = useParams();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({
-    titre: "",
-    texte: "",
-    url: "",
-    status: "ÉDITO",
-    poids: 0,
-    film_id: "",
-    is_published: false,
-  });
-
+  const [form, setForm] = useState(null);
   const [films, setFilms] = useState([]);
   const [image, setImage] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    async function loadFilms() {
-      const { data, error } = await supabase
-        .from("films")
-        .select("id, titre")
-        .order("titre", { ascending: true });
+    async function loadData() {
+      const [{ data: editoData, error: editoError }, { data: filmsData }] =
+        await Promise.all([
+          supabase.from("editos").select("*").eq("id", id).single(),
+          supabase
+            .from("films")
+            .select("id, titre")
+            .order("titre", { ascending: true }),
+        ]);
 
-      if (error) {
-        console.error("Erreur chargement films :", error);
+      if (editoError) {
+        navigate("/admin/editos");
         return;
       }
 
-      setFilms(data || []);
+      setForm(editoData);
+      setFilms(filmsData || []);
+      setLoading(false);
     }
 
-    loadFilms();
-  }, []);
+    loadData();
+  }, [id, navigate]);
 
   const updateField = (field, value) => {
     setForm((current) => ({
@@ -56,11 +55,10 @@ export default function AdminEditoNew() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    setLoading(true);
+    setSaving(true);
     setMessage("");
 
-    let imageUrl = "";
+    let imageUrl = form.image_url || "";
 
     if (image) {
       const fileExt = image.name.split(".").pop();
@@ -73,7 +71,7 @@ export default function AdminEditoNew() {
 
       if (uploadError) {
         setMessage("Erreur upload image : " + uploadError.message);
-        setLoading(false);
+        setSaving(false);
         return;
       }
 
@@ -81,31 +79,38 @@ export default function AdminEditoNew() {
       imageUrl = data.publicUrl;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("editos")
+      .update({
+        titre: form.titre,
+        texte: form.texte,
+        url: form.url,
+        status: form.status,
+        poids: Number(form.poids) || 0,
+        film_id: form.film_id || null,
+        image_url: imageUrl,
+        is_published: form.is_published,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
 
-    const { error } = await supabase.from("editos").insert({
-      author_id: user?.id || null,
-      titre: form.titre,
-      texte: form.texte,
-      url: form.url,
-      status: form.status,
-      poids: Number(form.poids) || 0,
-      film_id: form.film_id || null,
-      image_url: imageUrl,
-      is_published: form.is_published,
-    });
-
-    setLoading(false);
+    setSaving(false);
 
     if (error) {
-      setMessage("Erreur création édito : " + error.message);
+      setMessage("Erreur modification édito : " + error.message);
       return;
     }
 
     navigate("/admin/editos");
   };
+
+  if (loading || !form) {
+    return (
+      <main className="min-h-screen bg-black px-6 py-16 text-white">
+        Chargement de l’édito...
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-black px-6 py-16 text-white">
@@ -118,7 +123,7 @@ export default function AdminEditoNew() {
           ← Retour éditos
         </button>
 
-        <h1 className="text-4xl font-bold">Nouvel édito</h1>
+        <h1 className="text-4xl font-bold">Modifier l’édito</h1>
 
         <form
           onSubmit={handleSubmit}
@@ -128,7 +133,7 @@ export default function AdminEditoNew() {
             <label className="mb-2 block text-sm text-white/60">Titre</label>
             <input
               required
-              value={form.titre}
+              value={form.titre || ""}
               onChange={(e) => updateField("titre", e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 outline-none focus:border-white/40"
             />
@@ -138,7 +143,7 @@ export default function AdminEditoNew() {
             <label className="mb-2 block text-sm text-white/60">Texte</label>
             <textarea
               rows={5}
-              value={form.texte}
+              value={form.texte || ""}
               onChange={(e) => updateField("texte", e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 outline-none focus:border-white/40"
             />
@@ -150,7 +155,7 @@ export default function AdminEditoNew() {
             </label>
 
             <select
-              value={form.film_id}
+              value={form.film_id || ""}
               onChange={(e) => updateField("film_id", e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 outline-none focus:border-white/40"
             >
@@ -174,7 +179,7 @@ export default function AdminEditoNew() {
               Lien de destination
             </label>
             <input
-              value={form.url}
+              value={form.url || ""}
               onChange={(e) => updateField("url", e.target.value)}
               placeholder="/catalogue ou https://..."
               className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 outline-none focus:border-white/40"
@@ -185,7 +190,7 @@ export default function AdminEditoNew() {
             <div>
               <label className="mb-2 block text-sm text-white/60">Statut</label>
               <input
-                value={form.status}
+                value={form.status || ""}
                 onChange={(e) => updateField("status", e.target.value)}
                 placeholder="ÉDITO, ACTU, APPEL..."
                 className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 outline-none focus:border-white/40"
@@ -196,15 +201,28 @@ export default function AdminEditoNew() {
               <label className="mb-2 block text-sm text-white/60">Poids</label>
               <input
                 type="number"
-                value={form.poids}
+                value={form.poids || 0}
                 onChange={(e) => updateField("poids", e.target.value)}
                 className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 outline-none focus:border-white/40"
               />
             </div>
           </div>
 
+          {form.image_url && (
+            <div>
+              <p className="mb-2 text-sm text-white/60">Image actuelle</p>
+              <img
+                src={form.image_url}
+                alt={form.titre}
+                className="h-40 rounded-xl object-cover"
+              />
+            </div>
+          )}
+
           <div>
-            <label className="mb-2 block text-sm text-white/60">Image</label>
+            <label className="mb-2 block text-sm text-white/60">
+              Remplacer l’image
+            </label>
             <input
               type="file"
               accept="image/*"
@@ -216,10 +234,10 @@ export default function AdminEditoNew() {
           <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/40 p-4">
             <input
               type="checkbox"
-              checked={form.is_published}
+              checked={!!form.is_published}
               onChange={(e) => updateField("is_published", e.target.checked)}
             />
-            <span>Publier directement</span>
+            <span>Édito publié</span>
           </label>
 
           {message && (
@@ -229,10 +247,10 @@ export default function AdminEditoNew() {
           )}
 
           <button
-            disabled={loading}
+            disabled={saving}
             className="w-full rounded-xl bg-white px-5 py-3 font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
           >
-            {loading ? "Enregistrement..." : "Créer l’édito"}
+            {saving ? "Enregistrement..." : "Enregistrer les modifications"}
           </button>
         </form>
       </div>

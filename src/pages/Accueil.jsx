@@ -525,11 +525,31 @@ export default function Accueil() {
     }));
   }, [editos]);
 
-  const allContent = useMemo(() => {
-    return [...formattedFilms, ...formattedEditos].sort(
-      (a, b) => (b.priorite || 0) - (a.priorite || 0)
-    );
-  }, [formattedFilms, formattedEditos]);
+const allContent = useMemo(() => {
+  const films = [...formattedFilms];
+  const editos = [...formattedEditos].sort(
+    (a, b) => (b.priorite || 0) - (a.priorite || 0)
+  );
+
+  if (!films.length) return editos;
+  if (!editos.length) return films;
+
+  const result = [];
+  let editoIndex = 0;
+
+  films.forEach((film, index) => {
+    result.push(film);
+
+    const shouldInsertEdito = (index + 1) % 8 === 0;
+
+    if (shouldInsertEdito) {
+      result.push(editos[editoIndex % editos.length]);
+      editoIndex += 1;
+    }
+  });
+
+  return result;
+}, [formattedFilms, formattedEditos]);
 
   const baseGridItems = useMemo(() => {
     return Array.from({ length: 12 }).map((_, index) => {

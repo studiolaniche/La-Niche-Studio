@@ -24,7 +24,9 @@ export default function App() {
           <Link to="/a-propos" className="hover:text-gray-300 transition-colors">
             À propos
           </Link>
-
+          <Link to="/fenetre">
+            Ma fenêtre
+          </Link>
           <Link
             to="/participer"
             className="font-semibold text-yellow-300 hover:text-yellow-200 transition-colors"

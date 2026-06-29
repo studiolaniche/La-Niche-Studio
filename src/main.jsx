@@ -18,6 +18,7 @@ import Accueil from "./pages/Accueil.jsx";
 import Admin from "./pages/Admin.jsx";
 import AdminFilmNew from "./pages/AdminFilmNew.jsx";
 import AdminFilmEdit from "./pages/AdminFilmEdit.jsx";
+import AdminEditoEdit from "./pages/AdminEditoEdit.jsx";
 import AdminEditos from "./pages/AdminEditos.jsx";
 import AdminStats from "./pages/AdminStats.jsx";
 import AdminEditoNew from "./pages/AdminEditoNew.jsx";
@@ -28,6 +29,7 @@ import Login from "./pages/Login.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
 import Apropos from "./pages/Apropos.jsx";
 import Participer from "./pages/Participer.jsx";
+import Fenetre from "./pages/Fenetre.jsx";
 import CGU from "./pages/CGU.jsx";
 import MentionsLegales from "./pages/MentionsLegales.jsx";
 
@@ -51,6 +53,7 @@ const router = createBrowserRouter([
       { path: "admin/films/new", element: <AdminFilmNew /> },
       { path: "admin/films/:id/edit", element: <AdminFilmEdit /> },
       { path: "admin/editos", element: <AdminEditos /> },
+      { path: "admin/editos/:id/edit", element: <AdminEditoEdit /> },
       { path: "admin/stats", element: <AdminStats /> },
       { path: "admin/editos/new", element: <AdminEditoNew /> },
       { path: "nouveautes", element: <Nouveautes /> },
@@ -59,6 +62,7 @@ const router = createBrowserRouter([
       { path: "login", element: <Login /> },
       { path: "mon-espace", element: <MonEspace /> },
       { path: "a-propos", element: <Apropos /> },
+      { path: "fenetre", element: <Fenetre /> },
 
       // Anciennes pages redirigées vers Participer
       { path: "soutenir", element: <Navigate to="/participer" replace /> },
