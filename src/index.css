@@ -22,3 +22,13 @@ html,
 body {
   @apply bg-black text-white;
 }
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}

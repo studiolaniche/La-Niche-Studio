@@ -9,13 +9,10 @@ const FALLBACK_THUMB = "/miniatures/placeholder.jpg";
 function getStableColor(text) {
   if (!text) return "#666";
   let hash = 0;
-
   for (let i = 0; i < text.length; i++) {
     hash = text.charCodeAt(i) + ((hash << 5) - hash);
   }
-
-  const hue = Math.abs(hash) % 360;
-  return `hsl(${hue}, 70%, 45%)`;
+  return `hsl(${Math.abs(hash) % 360}, 70%, 45%)`;
 }
 
 function seededRandom(seed) {
@@ -35,12 +32,9 @@ function isSameMedia(a, b) {
 function preloadImage(src) {
   return new Promise((resolve) => {
     if (!src) return resolve(false);
-
     const img = new Image();
     img.src = src;
-
     if (img.complete) return resolve(true);
-
     img.onload = () => resolve(true);
     img.onerror = () => resolve(false);
   });
@@ -57,12 +51,8 @@ function BubbleHintPopup() {
 
   useEffect(() => {
     const alreadySeen = sessionStorage.getItem("bubbleHintSeen");
-
     if (!alreadySeen) {
-      const timer = setTimeout(() => {
-        setVisible(true);
-      }, 1600);
-
+      const timer = setTimeout(() => setVisible(true), 1600);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -75,22 +65,22 @@ function BubbleHintPopup() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 max-w-[330px] rounded-2xl border border-white/15 bg-black/80 p-4 text-white shadow-2xl backdrop-blur-md">
+    <div className="fixed bottom-4 left-4 right-4 z-50 rounded-3xl border border-white/15 bg-black/85 p-4 text-white shadow-2xl backdrop-blur-md sm:left-auto sm:right-5 sm:max-w-[330px]">
       <button
         type="button"
         onClick={close}
-        className="absolute right-3 top-2 text-xl leading-none text-white/50 transition hover:text-white"
+        className="absolute right-4 top-3 text-xl leading-none text-white/50 transition hover:text-white"
         aria-label="Fermer"
       >
         ×
       </button>
 
-      <p className="pr-6 text-sm font-semibold leading-snug">
-        Astuce : tout est cliquable !
+      <p className="pr-8 text-sm font-semibold leading-snug">
+        Astuce : touchez les images.
       </p>
 
       <p className="mt-2 text-xs leading-relaxed text-white/70">
-        Cliquez sur les pastilles pour naviguer de film en film.
+        Un premier tap affiche les infos, un second ouvre le film.
       </p>
 
       <button
@@ -124,7 +114,6 @@ function SmoothColorTile({
 
     const startTimer = setTimeout(() => {
       if (cancelled) return;
-
       setOverlayColor(color);
 
       requestAnimationFrame(() => {
@@ -163,7 +152,7 @@ function SmoothColorTile({
 
       {overlayColor && (
         <div
-          className="absolute inset-0 transition-opacity duration-[2600ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="absolute inset-0 transition-opacity duration-[2600ms]"
           style={{
             background: `linear-gradient(135deg, ${overlayColor} 0%, ${overlayColor}dd 45%, ${overlayColor}bb 100%)`,
             opacity: showOverlay ? 1 : 0,
@@ -189,7 +178,6 @@ function RotatingMediaTile({
   const [currentItem, setCurrentItem] = useState(item);
   const [nextItem, setNextItem] = useState(null);
   const [showNext, setShowNext] = useState(false);
-
   const transitionTokenRef = useRef(0);
 
   useEffect(() => {
@@ -291,7 +279,7 @@ function RotatingMediaTile({
       onMouseEnter={() => setActiveTile(slotIndex)}
       onMouseLeave={() => setActiveTile(null)}
       className={[
-        "relative overflow-hidden bg-black/40 text-left",
+        "relative h-full w-full overflow-hidden bg-black/40 text-left",
         "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]",
         "focus:outline-none focus:ring-2 focus:ring-white/30",
         "cine-grain",
@@ -310,8 +298,7 @@ function RotatingMediaTile({
             }}
             className={[
               "absolute inset-0 h-full w-full object-cover",
-              "transition-[opacity,transform] duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-              "will-change-[opacity,transform] [transform:translateZ(0)]",
+              "transition-[opacity,transform] duration-[1500ms]",
               showNext ? "opacity-0 scale-[1.02]" : "opacity-95 scale-100",
             ].join(" ")}
           />
@@ -328,8 +315,7 @@ function RotatingMediaTile({
             }}
             className={[
               "absolute inset-0 h-full w-full object-cover",
-              "transition-[opacity,transform] duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-              "will-change-[opacity,transform] [transform:translateZ(0)]",
+              "transition-[opacity,transform] duration-[1500ms]",
               showNext ? "opacity-95 scale-100" : "opacity-0 scale-[1.04]",
             ].join(" ")}
           />
@@ -391,6 +377,53 @@ function RotatingMediaTile({
         </div>
       </div>
     </button>
+  );
+}
+
+function MobileMosaicBackground({ items }) {
+  const images = items
+    .filter((item) => item.type === "film" || item.type === "edito")
+    .map((item) => item.src)
+    .filter(Boolean);
+
+  const mosaicImages = images.length
+    ? Array.from({ length: 36 }).map((_, index) => images[index % images.length])
+    : Array.from({ length: 36 }).map(() => FALLBACK_THUMB);
+
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      <style>{`
+        @keyframes lbvMobileMosaicSlide {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(-28%); }
+        }
+      `}</style>
+
+      <div
+        className="grid w-full grid-cols-3 gap-1.5 p-1.5 opacity-80"
+        style={{
+          animation: "lbvMobileMosaicSlide 38s linear infinite",
+        }}
+      >
+        {[...mosaicImages, ...mosaicImages].map((src, index) => (
+          <div
+            key={`${src}-${index}`}
+            className="aspect-[4/3] overflow-hidden rounded-md bg-white/5"
+          >
+            <img
+              src={src}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = FALLBACK_THUMB;
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -485,9 +518,7 @@ export default function Accueil() {
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.key === "Escape") {
-        setActiveTile(null);
-      }
+      if (event.key === "Escape") setActiveTile(null);
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -525,43 +556,39 @@ export default function Accueil() {
     }));
   }, [editos]);
 
-const allContent = useMemo(() => {
-  const films = [...formattedFilms];
-  const editos = [...formattedEditos].sort(
-    (a, b) => (b.priorite || 0) - (a.priorite || 0)
-  );
+  const allContent = useMemo(() => {
+    const films = [...formattedFilms];
+    const editos = [...formattedEditos].sort(
+      (a, b) => (b.priorite || 0) - (a.priorite || 0)
+    );
 
-  if (!films.length) return editos;
-  if (!editos.length) return films;
+    if (!films.length) return editos;
+    if (!editos.length) return films;
 
-  const result = [];
-  let editoIndex = 0;
+    const result = [];
+    let editoIndex = 0;
 
-  films.forEach((film, index) => {
-    result.push(film);
+    films.forEach((film, index) => {
+      result.push(film);
 
-    const shouldInsertEdito = (index + 1) % 8 === 0;
+      if ((index + 1) % 8 === 0) {
+        result.push(editos[editoIndex % editos.length]);
+        editoIndex += 1;
+      }
+    });
 
-    if (shouldInsertEdito) {
-      result.push(editos[editoIndex % editos.length]);
-      editoIndex += 1;
-    }
-  });
-
-  return result;
-}, [formattedFilms, formattedEditos]);
+    return result;
+  }, [formattedFilms, formattedEditos]);
 
   const baseGridItems = useMemo(() => {
     return Array.from({ length: 12 }).map((_, index) => {
       if (index === 0) return { type: "text", content: "LA" };
-
       if (index === 2) {
         return {
           type: "subtitle",
           content: "La plateforme grenobloise du court-métrage indépendant !",
         };
       }
-
       if (index === 5) return { type: "text", content: "BAIE" };
       if (index === 10) return { type: "text", content: "VITRÉE" };
 
@@ -575,7 +602,6 @@ const allContent = useMemo(() => {
 
     async function prepareInitialRender() {
       const dataReady = !filmsLoading && !editosLoading && allContent.length > 0;
-
       if (!dataReady) return;
 
       const initialSources = baseGridItems
@@ -585,9 +611,7 @@ const allContent = useMemo(() => {
 
       await preloadMany(initialSources);
 
-      if (!cancelled) {
-        setInitialReady(true);
-      }
+      if (!cancelled) setInitialReady(true);
     }
 
     prepareInitialRender();
@@ -610,17 +634,15 @@ const allContent = useMemo(() => {
   const colorIndex = tick % COLORS.length;
   const offset = allContent.length ? tick % allContent.length : 0;
 
-  const gridItems = useMemo(() => {
+  const desktopGridItems = useMemo(() => {
     return Array.from({ length: 12 }).map((_, index) => {
       if (index === 0) return { type: "text", content: "LA" };
-
       if (index === 2) {
         return {
           type: "subtitle",
           content: "La plateforme grenobloise du court-métrage indépendant !",
         };
       }
-
       if (index === 5) return { type: "text", content: "BAIE" };
       if (index === 10) return { type: "text", content: "VITRÉE" };
 
@@ -635,103 +657,190 @@ const allContent = useMemo(() => {
   useEffect(() => {
     if (!initialReady) return;
 
-    const upcomingSources = gridItems
+    const upcomingSources = desktopGridItems
       .filter((item) => item.type === "film" || item.type === "edito")
       .map((item) => item.src)
       .filter(Boolean);
 
     preloadMany(upcomingSources);
-  }, [gridItems, initialReady]);
+  }, [desktopGridItems, initialReady]);
 
   const showLoader =
     !initialReady || filmsLoading || editosLoading || !allContent.length;
+
+  function renderTile(item, index) {
+    if (item.type === "text") {
+      return (
+        <SmoothColorTile
+          key={index}
+          color={COLORS[colorIndex]}
+          tick={tick}
+          slotIndex={index}
+          className="flex items-center justify-center"
+          innerClassName="flex items-center justify-center"
+        >
+          <div className="text-6xl font-extrabold tracking-wide text-white transition-transform duration-700 hover:scale-[1.02] sm:text-7xl lg:text-8xl">
+            {item.content}
+          </div>
+        </SmoothColorTile>
+      );
+    }
+
+    if (item.type === "subtitle") {
+      return (
+        <SmoothColorTile
+          key={index}
+          color={COLORS[colorIndex]}
+          tick={tick}
+          slotIndex={index}
+          className="flex items-center justify-center p-5 text-center text-white"
+          innerClassName="flex h-full flex-col items-center justify-center"
+        >
+          <p className="mb-4 max-w-[28rem] text-sm font-light leading-snug sm:text-lg lg:text-2xl">
+            {item.content}
+          </p>
+
+          <div className="mb-5 flex flex-wrap justify-center gap-2">
+            <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
+              Gratuit
+            </span>
+            <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
+              Don volontaire
+            </span>
+            <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
+              Ouverte à tous
+            </span>
+          </div>
+
+          <div className="flex gap-3">
+            <Link
+              to="/nouveautes"
+              className="rounded bg-white px-4 py-2 text-sm text-black transition hover:bg-white/90 md:text-base"
+            >
+              Nouveautés
+            </Link>
+
+            <Link
+              to="/catalogue"
+              className="rounded border border-white px-4 py-2 text-sm text-white transition hover:bg-white/10 md:text-base"
+            >
+              Voir le catalogue
+            </Link>
+          </div>
+        </SmoothColorTile>
+      );
+    }
+
+    if (item.type === "film" || item.type === "edito") {
+      return (
+        <RotatingMediaTile
+          key={index}
+          item={item}
+          tick={tick}
+          slotIndex={index}
+          isActive={activeTile === index}
+          setActiveTile={setActiveTile}
+          navigate={navigate}
+        />
+      );
+    }
+
+    return <div key={index} className="bg-black/25" />;
+  }
 
   if (showLoader) {
     return <LoadingLanding />;
   }
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] w-full bg-black">
-      <div className="grid h-[calc(100vh-4rem)] w-full grid-cols-1 grid-rows-3 bg-black/90 sm:grid-cols-2 lg:grid-cols-4">
-        {gridItems.map((item, index) => {
-          if (item.type === "text") {
-            return (
-              <SmoothColorTile
-                key={index}
-                color={COLORS[colorIndex]}
-                tick={tick}
-                slotIndex={index}
-                className="flex items-center justify-center"
-                innerClassName="flex items-center justify-center"
+    <div className="relative w-full bg-black">
+      {/* MOBILE : affiche avec mosaïque animée */}
+      <div className="md:hidden">
+        <section className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-black text-white">
+          <MobileMosaicBackground items={allContent} />
+
+          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-black/15" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black" />
+          <div className="absolute inset-0 bg-black/25" />
+
+          <div className="relative z-10 flex min-h-[calc(100vh-4rem)] flex-col justify-center px-6 py-10">
+            <p className="mb-5 text-xs font-bold uppercase tracking-[0.28em] text-white/75">
+              La Niche Studio présente
+            </p>
+
+            <h1 className="text-[4.8rem] font-black uppercase leading-[0.86] tracking-tight text-white drop-shadow-2xl">
+              La
+              <br />
+              Baie
+              <br />
+              Vitrée
+            </h1>
+
+            <div className="mt-7 h-px w-20 bg-white/70" />
+
+            <p className="mt-6 max-w-[19rem] text-xl font-light leading-snug text-white">
+              Le court-métrage indépendant grenoblois, à portée de main.
+            </p>
+
+            <div className="mt-8 space-y-3">
+              <Link
+                to="/catalogue"
+                className="flex items-center justify-between rounded-xl bg-white px-5 py-4 text-sm font-black uppercase tracking-wide text-black shadow-2xl"
               >
-                <div className="text-6xl font-extrabold tracking-wide text-white transition-transform duration-700 hover:scale-[1.02] sm:text-7xl lg:text-8xl">
-                  {item.content}
-                </div>
-              </SmoothColorTile>
-            );
-          }
+                Entrer dans le catalogue
+                <span className="text-2xl leading-none">→</span>
+              </Link>
 
-          if (item.type === "subtitle") {
-            return (
-              <SmoothColorTile
-                key={index}
-                color={COLORS[colorIndex]}
-                tick={tick}
-                slotIndex={index}
-                className="flex items-center justify-center p-5 text-center text-white"
-                innerClassName="flex h-full flex-col items-center justify-center"
+              <Link
+                to="/fenetre"
+                className="flex items-center justify-between rounded-xl border border-white/60 bg-black/25 px-5 py-4 text-sm font-bold uppercase tracking-wide text-white backdrop-blur-sm"
               >
-                <p className="mb-4 max-w-[28rem] text-sm font-light leading-snug sm:text-lg lg:text-2xl">
-                  {item.content}
-                </p>
+                Ma fenêtre
+                <span className="text-2xl leading-none">→</span>
+              </Link>
+            </div>
+          </div>
+        </section>
 
-                <div className="mb-5 flex flex-wrap justify-center gap-2">
-                  <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
-                    Gratuit
-                  </span>
-                  <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
-                    Don volontaire
-                  </span>
-                  <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
-                    Ouverte à tous
-                  </span>
-                </div>
+        <section className="grid grid-cols-2 border-t border-white/10 bg-black">
+          <Link
+            to="/nouveautes"
+            className="border-b border-r border-white/10 p-5 text-center"
+          >
+            <p className="text-2xl">✨</p>
+            <p className="mt-2 text-sm font-bold uppercase">Nouveautés</p>
+            <p className="mt-1 text-xs text-white/55">Les derniers films</p>
+          </Link>
 
-                <div className="flex gap-3">
-                  <Link
-                    to="/nouveautes"
-                    className="rounded bg-white px-4 py-2 text-sm text-black transition hover:bg-white/90 md:text-base"
-                  >
-                    Nouveautés
-                  </Link>
+          <Link
+            to="/catalogue"
+            className="border-b border-white/10 p-5 text-center"
+          >
+            <p className="text-2xl">🎬</p>
+            <p className="mt-2 text-sm font-bold uppercase">Catalogue</p>
+            <p className="mt-1 text-xs text-white/55">Explorer les films</p>
+          </Link>
 
-                  <Link
-                    to="/catalogue"
-                    className="rounded border border-white px-4 py-2 text-sm text-white transition hover:bg-white/10 md:text-base"
-                  >
-                    Voir le catalogue
-                  </Link>
-                </div>
-              </SmoothColorTile>
-            );
-          }
+          <Link
+            to="/participer"
+            className="border-r border-white/10 p-5 text-center"
+          >
+            <p className="text-2xl">💛</p>
+            <p className="mt-2 text-sm font-bold uppercase">Participer</p>
+            <p className="mt-1 text-xs text-white/55">Soutenir / proposer</p>
+          </Link>
 
-          if (item.type === "film" || item.type === "edito") {
-            return (
-              <RotatingMediaTile
-                key={index}
-                item={item}
-                tick={tick}
-                slotIndex={index}
-                isActive={activeTile === index}
-                setActiveTile={setActiveTile}
-                navigate={navigate}
-              />
-            );
-          }
+          <Link to="/a-propos" className="p-5 text-center">
+            <p className="text-2xl">ⓘ</p>
+            <p className="mt-2 text-sm font-bold uppercase">À propos</p>
+            <p className="mt-1 text-xs text-white/55">La Baie Vitrée</p>
+          </Link>
+        </section>
+      </div>
 
-          return <div key={index} className="bg-black/25" />;
-        })}
+      {/* ORDI : mosaïque actuelle conservée */}
+      <div className="hidden h-[calc(100vh-4rem)] w-full grid-cols-2 grid-rows-3 bg-black/90 md:grid lg:grid-cols-4">
+        {desktopGridItems.map((item, index) => renderTile(item, index))}
       </div>
 
       <BubbleHintPopup />

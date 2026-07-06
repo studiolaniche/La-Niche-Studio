@@ -39,6 +39,18 @@ export default function Catalogue() {
       .sort((a, b) => (Number(b.annee) || 0) - (Number(a.annee) || 0));
   }, [rawFilms]);
 
+  const statuses = useMemo(() => {
+    const unique = new Map();
+
+    films.forEach((film) => {
+      if (film.status) {
+        unique.set(normalizeText(film.status), film.status);
+      }
+    });
+
+    return Array.from(unique.values());
+  }, [films]);
+
   const updateFilter = (key, value) => {
     const params = new URLSearchParams(searchParams);
 
@@ -53,6 +65,7 @@ export default function Catalogue() {
 
   const clearAllFilters = () => {
     setSearchParams({});
+    setQuery("");
   };
 
   const filtered = useMemo(() => {
@@ -105,7 +118,7 @@ export default function Catalogue() {
   }
 
   return (
-    <section className="w-full px-4 py-10 md:px-8">
+    <section className="w-full bg-black px-4 py-6 text-white md:px-8 md:py-10">
       <Breadcrumb
         items={[
           { label: "Accueil", href: "/" },
@@ -113,41 +126,88 @@ export default function Catalogue() {
         ]}
       />
 
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <h2 className="text-3xl font-bold">{title}</h2>
+      <div className="mb-6 md:mb-8">
+        <p className="mb-2 text-xs uppercase tracking-[0.3em] text-white/45 md:hidden">
+          Explorer
+        </p>
 
-        <div className="relative flex w-full items-center md:w-96">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher un film, un réalisateur, une année…"
-            className="w-full rounded bg-white/10 px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/40"
-          />
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-4xl font-black leading-none tracking-tight md:text-3xl md:font-bold">
+              {title}
+            </h2>
 
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="absolute right-2 text-gray-300 hover:text-white"
-            >
-              ✕
-            </button>
-          )}
+            <p className="mt-3 text-sm text-white/55 md:hidden">
+              {filtered.length} film{filtered.length > 1 ? "s" : ""} disponible
+              {filtered.length > 1 ? "s" : ""}
+            </p>
+          </div>
+
+          <div className="relative flex w-full items-center md:w-96">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Rechercher un film, un réalisateur, une année…"
+              className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/40 md:rounded md:py-2"
+            />
+
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-3 text-gray-300 hover:text-white"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {(selectedStatus || selectedDirector) && (
+      {statuses.length > 0 && (
+        <div className="mb-6 flex gap-2 overflow-x-auto pb-2 md:flex-wrap md:overflow-visible">
+          <button
+            type="button"
+            onClick={() => updateFilter("status", "")}
+            className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+              !selectedStatus
+                ? "border-white bg-white text-black"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10"
+            }`}
+          >
+            Tous
+          </button>
+
+          {statuses.map((status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => handleStatusClick(status)}
+              className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold text-white transition ${
+                normalizeText(selectedStatus) === normalizeText(status)
+                  ? "ring-2 ring-white"
+                  : ""
+              }`}
+              style={{ backgroundColor: getStableColor(status) }}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(selectedStatus || selectedDirector || query) && (
         <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
-          <span className="opacity-70">Filtres actifs :</span>
+          <span className="opacity-60">Filtres :</span>
 
           {selectedStatus && (
             <button
               type="button"
               onClick={() => updateFilter("status", "")}
-              className="rounded-full bg-white/20 px-3 py-1 transition hover:bg-white/30"
+              className="rounded-full bg-white/20 px-3 py-1.5 transition hover:bg-white/30"
             >
-              Statut : {selectedStatus} ✕
+              {selectedStatus} ✕
             </button>
           )}
 
@@ -155,16 +215,16 @@ export default function Catalogue() {
             <button
               type="button"
               onClick={() => updateFilter("realisateur", "")}
-              className="rounded-full bg-white/20 px-3 py-1 transition hover:bg-white/30"
+              className="rounded-full bg-white/20 px-3 py-1.5 transition hover:bg-white/30"
             >
-              Réalisateur·ice : {selectedDirector} ✕
+              {selectedDirector} ✕
             </button>
           )}
 
           <button
             type="button"
             onClick={clearAllFilters}
-            className="rounded-full border border-white/20 px-3 py-1 transition hover:bg-white/10"
+            className="rounded-full border border-white/20 px-3 py-1.5 transition hover:bg-white/10"
           >
             Tout effacer
           </button>
@@ -172,9 +232,11 @@ export default function Catalogue() {
       )}
 
       {!filtered.length ? (
-        <p className="opacity-70">Aucun film ne correspond à votre recherche.</p>
+        <p className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-sm opacity-70">
+          Aucun film ne correspond à votre recherche.
+        </p>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {filtered.map((film) => {
             const miniature =
               film.miniature_url ||
@@ -183,9 +245,9 @@ export default function Catalogue() {
                 : "/miniatures/placeholder.jpg");
 
             return (
-              <div
+              <article
                 key={film.id}
-                className="group relative block overflow-hidden rounded-lg bg-black/20 shadow-lg transition-transform duration-300 hover:scale-[1.02]"
+                className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-lg transition-transform duration-300 hover:scale-[1.02] md:rounded-lg md:bg-black/20"
               >
                 {film.status && (
                   <button
@@ -205,7 +267,7 @@ export default function Catalogue() {
                 )}
 
                 <Link to={`/projet/${film.slug || film.id}`}>
-                  <div className="relative aspect-video w-full overflow-hidden">
+                  <div className="relative aspect-[4/3] w-full overflow-hidden md:aspect-video">
                     <img
                       src={miniature}
                       alt={film.titre}
@@ -213,9 +275,23 @@ export default function Catalogue() {
                       loading="lazy"
                       decoding="async"
                     />
+
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent md:hidden" />
+
+                    <div className="absolute bottom-0 left-0 right-0 p-4 md:hidden">
+                      <h3 className="text-xl font-black leading-tight text-white">
+                        {film.titre}
+                      </h3>
+
+                      <p className="mt-1 text-sm text-white/75">
+                        {film.realisateur_1}
+                        {film.realisateur_2 ? ` & ${film.realisateur_2}` : ""}
+                        {film.annee ? ` • ${film.annee}` : ""}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="bg-black p-3 text-white">
+                  <div className="hidden bg-black p-3 text-white md:block">
                     <h3 className="truncate text-base font-semibold">
                       {film.titre}
                     </h3>
@@ -227,7 +303,7 @@ export default function Catalogue() {
                     </p>
                   </div>
                 </Link>
-              </div>
+              </article>
             );
           })}
         </div>
