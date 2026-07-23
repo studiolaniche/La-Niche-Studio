@@ -4,14 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "vite",
-    "build:films": "node scripts/build-films.mjs",
-    "build": "npm run build:films && vite build",
-    "preview": "vite preview",
-    "lint": "eslint ."
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
