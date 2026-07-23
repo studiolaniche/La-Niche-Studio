@@ -1,443 +1,817 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
-const COLORS = ["#FF0054", "#0096FF", "#00C49A", "#FFB800", "#C83CB9"];
-const ROTATION_MS = 28000;
+const COLORS = [
+  "#FF0054",
+  "#0096FF",
+  "#00C49A",
+  "#FFB800",
+  "#C83CB9",
+];
+
+const HERO_PALETTE = [
+  "#E94B35",
+  "#F2C14E",
+  "#2A9D8F",
+  "#3A86FF",
+  "#C77DFF",
+  "#FF6B9A",
+];
+
+const FLICKER_FONTS = [
+  {
+    className: "font-flicker-anton",
+    letterSpacing: "-0.035em",
+    lineHeight: 0.82,
+    transform: "scaleX(0.98)",
+  },
+  {
+    className: "font-flicker-archivo",
+    letterSpacing: "-0.075em",
+    lineHeight: 0.84,
+    transform: "scaleX(0.9)",
+  },
+  {
+    className: "font-flicker-bebas",
+    letterSpacing: "0.005em",
+    lineHeight: 0.78,
+    transform: "scaleX(1.03)",
+  },
+  {
+    className: "font-flicker-cormorant",
+    letterSpacing: "-0.055em",
+    lineHeight: 0.76,
+    transform: "scaleX(1)",
+  },
+  {
+    className: "font-flicker-dm-serif",
+    letterSpacing: "-0.065em",
+    lineHeight: 0.8,
+    transform: "scaleX(0.94)",
+  },
+  {
+    className: "font-flicker-ibm",
+    letterSpacing: "-0.09em",
+    lineHeight: 0.84,
+    transform: "scaleX(0.78)",
+  },
+  {
+    className: "font-flicker-inter",
+    letterSpacing: "-0.085em",
+    lineHeight: 0.8,
+    transform: "scaleX(0.92)",
+  },
+  {
+    className: "font-flicker-oswald",
+    letterSpacing: "-0.045em",
+    lineHeight: 0.8,
+    transform: "scaleX(0.96)",
+  },
+  {
+    className: "font-flicker-playfair",
+    letterSpacing: "-0.07em",
+    lineHeight: 0.76,
+    transform: "scaleX(0.92)",
+  },
+];
+
+/*
+  La police finale n’est pas incluse dans le tirage aléatoire.
+  Elle apparaît seulement à la fin des cinq secondes.
+*/
+const REFERENCE_FONT = {
+  className: "font-title-reference",
+  letterSpacing: "-0.065em",
+  lineHeight: 0.8,
+  transform: "scaleX(1)",
+};
+
+const FLICKER_DURATION = 5000;
+
 const FALLBACK_THUMB = "/miniatures/placeholder.jpg";
 
-function getStableColor(text) {
-  if (!text) return "#666";
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = text.charCodeAt(i) + ((hash << 5) - hash);
+function shuffleArray(array) {
+  const shuffled = [...array];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+
+    [shuffled[index], shuffled[randomIndex]] = [
+      shuffled[randomIndex],
+      shuffled[index],
+    ];
   }
-  return `hsl(${Math.abs(hash) % 360}, 70%, 45%)`;
+
+  return shuffled;
 }
 
-function seededRandom(seed) {
-  const x = Math.sin(seed * 9999.91) * 10000;
-  return x - Math.floor(x);
+function getRandomItem(array) {
+  return array[Math.floor(Math.random() * array.length)];
 }
 
-function getStableDelay(slotIndex, max = 1600) {
-  return Math.floor(seededRandom(slotIndex * 137.7) * max);
+function hexToRgb(hexColor) {
+  const cleanHex = hexColor.replace("#", "");
+
+  const normalizedHex =
+    cleanHex.length === 3
+      ? cleanHex
+          .split("")
+          .map((character) => character + character)
+          .join("")
+      : cleanHex;
+
+  return {
+    red: parseInt(normalizedHex.slice(0, 2), 16),
+    green: parseInt(normalizedHex.slice(2, 4), 16),
+    blue: parseInt(normalizedHex.slice(4, 6), 16),
+  };
 }
 
-function isSameMedia(a, b) {
-  if (!a || !b) return false;
-  return a.id === b.id && a.type === b.type && a.src === b.src;
-}
+function getRelativeLuminance(hexColor) {
+  const { red, green, blue } = hexToRgb(hexColor);
 
-function preloadImage(src) {
-  return new Promise((resolve) => {
-    if (!src) return resolve(false);
-    const img = new Image();
-    img.src = src;
-    if (img.complete) return resolve(true);
-    img.onload = () => resolve(true);
-    img.onerror = () => resolve(false);
+  const channels = [red, green, blue].map((channel) => {
+    const normalized = channel / 255;
+
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4);
   });
+
+  return (
+    0.2126 * channels[0] +
+    0.7152 * channels[1] +
+    0.0722 * channels[2]
+  );
 }
 
-async function preloadMany(sources = []) {
-  const unique = [...new Set(sources.filter(Boolean))];
-  if (!unique.length) return;
-  await Promise.all(unique.map((src) => preloadImage(src)));
-}
+function getRandomHeroTheme() {
+  const backgroundColor = getRandomItem(HERO_PALETTE);
+  const luminance = getRelativeLuminance(backgroundColor);
+  const isLightBackground = luminance > 0.42;
 
-function BubbleHintPopup() {
-  const [visible, setVisible] = useState(false);
+  return {
+    backgroundColor,
 
-  useEffect(() => {
-    const alreadySeen = sessionStorage.getItem("bubbleHintSeen");
-    if (!alreadySeen) {
-      const timer = setTimeout(() => setVisible(true), 1600);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+    textColor: isLightBackground ? "#111111" : "#FFFFFF",
 
-  const close = () => {
-    sessionStorage.setItem("bubbleHintSeen", "true");
-    setVisible(false);
+    subtleTextColor: isLightBackground
+      ? "rgba(17, 17, 17, 0.64)"
+      : "rgba(255, 255, 255, 0.70)",
+
+    faintTextColor: isLightBackground
+      ? "rgba(17, 17, 17, 0.48)"
+      : "rgba(255, 255, 255, 0.52)",
+
+    borderColor: isLightBackground
+      ? "rgba(17, 17, 17, 0.24)"
+      : "rgba(255, 255, 255, 0.28)",
   };
+}
 
-  if (!visible) return null;
-
+function getFilmImage(film) {
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 rounded-3xl border border-white/15 bg-black/85 p-4 text-white shadow-2xl backdrop-blur-md sm:left-auto sm:right-5 sm:max-w-[330px]">
-      <button
-        type="button"
-        onClick={close}
-        className="absolute right-4 top-3 text-xl leading-none text-white/50 transition hover:text-white"
-        aria-label="Fermer"
-      >
-        ×
-      </button>
-
-      <p className="pr-8 text-sm font-semibold leading-snug">
-        Astuce : touchez les images.
-      </p>
-
-      <p className="mt-2 text-xs leading-relaxed text-white/70">
-        Un premier tap affiche les infos, un second ouvre le film.
-      </p>
-
-      <button
-        type="button"
-        onClick={close}
-        className="mt-4 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black transition hover:bg-white/90"
-      >
-        Compris
-      </button>
-    </div>
+    film.hero_image_url ||
+    film.miniature_url ||
+    (film.vimeo_id
+      ? `https://vumbnail.com/${film.vimeo_id}.jpg`
+      : FALLBACK_THUMB)
   );
 }
 
-function SmoothColorTile({
-  children,
-  color,
-  tick,
-  slotIndex,
-  className = "",
-  innerClassName = "",
-}) {
-  const [baseColor, setBaseColor] = useState(color);
-  const [overlayColor, setOverlayColor] = useState(null);
-  const [showOverlay, setShowOverlay] = useState(false);
-
-  useEffect(() => {
-    if (baseColor === color) return;
-
-    let cancelled = false;
-    const delay = getStableDelay(slotIndex, 1400);
-
-    const startTimer = setTimeout(() => {
-      if (cancelled) return;
-      setOverlayColor(color);
-
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!cancelled) setShowOverlay(true);
-        });
-      });
-    }, delay);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(startTimer);
-    };
-  }, [color, baseColor, tick, slotIndex]);
-
-  useEffect(() => {
-    if (!showOverlay || !overlayColor) return;
-
-    const endTimer = setTimeout(() => {
-      setBaseColor(overlayColor);
-      setOverlayColor(null);
-      setShowOverlay(false);
-    }, 2600);
-
-    return () => clearTimeout(endTimer);
-  }, [showOverlay, overlayColor]);
-
+function getFilmThumbnail(film) {
   return (
-    <div className={`relative overflow-hidden ${className}`}>
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `linear-gradient(135deg, ${baseColor} 0%, ${baseColor}dd 45%, ${baseColor}bb 100%)`,
-        }}
-      />
-
-      {overlayColor && (
-        <div
-          className="absolute inset-0 transition-opacity duration-[2600ms]"
-          style={{
-            background: `linear-gradient(135deg, ${overlayColor} 0%, ${overlayColor}dd 45%, ${overlayColor}bb 100%)`,
-            opacity: showOverlay ? 1 : 0,
-          }}
-        />
-      )}
-
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.08),transparent_36%)]" />
-
-      <div className={`relative z-10 h-full ${innerClassName}`}>{children}</div>
-    </div>
+    film.miniature_url ||
+    film.hero_image_url ||
+    (film.vimeo_id
+      ? `https://vumbnail.com/${film.vimeo_id}.jpg`
+      : FALLBACK_THUMB)
   );
 }
 
-function RotatingMediaTile({
-  item,
-  tick,
-  slotIndex,
-  isActive,
-  setActiveTile,
-  navigate,
-}) {
-  const [currentItem, setCurrentItem] = useState(item);
-  const [nextItem, setNextItem] = useState(null);
-  const [showNext, setShowNext] = useState(false);
-  const transitionTokenRef = useRef(0);
+function getFilmUrl(film) {
+  return `/projet/${film.slug || film.id}`;
+}
+
+function getDirectors(film) {
+  return [film.realisateur_1, film.realisateur_2]
+    .filter(Boolean)
+    .join(" & ");
+}
+
+function getStableColor(text) {
+  if (!text) {
+    return "#666666";
+  }
+
+  let hash = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash = text.charCodeAt(index) + ((hash << 5) - hash);
+  }
+
+  const hue = Math.abs(hash) % 360;
+
+  return `hsl(${hue}, 70%, 45%)`;
+}
+
+function MobileIntroHero({ filmCount }) {
+  const theme = useMemo(() => getRandomHeroTheme(), []);
+
+  const [activeFont, setActiveFont] = useState(() =>
+    getRandomItem(FLICKER_FONTS)
+  );
+
+  const [flickerFinished, setFlickerFinished] = useState(false);
 
   useEffect(() => {
-    setCurrentItem(item);
-  }, []);
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
 
-  useEffect(() => {
-    if (!item) return;
-
-    if (!currentItem) {
-      setCurrentItem(item);
-      return;
+    if (prefersReducedMotion) {
+      setActiveFont(REFERENCE_FONT);
+      setFlickerFinished(true);
+      return undefined;
     }
 
-    if (isSameMedia(currentItem, item)) return;
-
+    let timeoutId;
+    let previousIndex = -1;
     let cancelled = false;
-    const token = Date.now() + slotIndex + tick;
-    transitionTokenRef.current = token;
 
-    const delay = getStableDelay(slotIndex, 1800);
-    let localTimer = null;
+    const startTime = performance.now();
 
-    async function run() {
-      await preloadImage(item.src);
-
-      if (cancelled || transitionTokenRef.current !== token) return;
-
-      localTimer = setTimeout(() => {
-        if (cancelled || transitionTokenRef.current !== token) return;
-
-        setNextItem(item);
-
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            if (!cancelled && transitionTokenRef.current === token) {
-              setShowNext(true);
-            }
-          });
-        });
-      }, delay);
-    }
-
-    run();
-
-    return () => {
-      cancelled = true;
-      if (localTimer) clearTimeout(localTimer);
-    };
-  }, [item, currentItem, tick, slotIndex]);
-
-  useEffect(() => {
-    if (!showNext || !nextItem) return;
-
-    const finalizeTimer = setTimeout(() => {
-      setCurrentItem(nextItem);
-      setNextItem(null);
-      setShowNext(false);
-    }, 1500);
-
-    return () => clearTimeout(finalizeTimer);
-  }, [showNext, nextItem]);
-
-  const displayedItem = nextItem || currentItem;
-
-  if (!displayedItem) return <div className="bg-black/20" />;
-
-  const handleOpen = () => {
-    if (displayedItem.type === "film") {
-      navigate(`/projet/${displayedItem.slug || displayedItem.id}`);
-      return;
-    }
-
-    if (displayedItem.url && displayedItem.url !== "#") {
-      if (displayedItem.url.startsWith("/")) {
-        navigate(displayedItem.url);
-      } else {
-        window.location.href = displayedItem.url;
+    function scheduleNextFont() {
+      if (cancelled) {
+        return;
       }
+
+      const elapsed = performance.now() - startTime;
+
+      if (elapsed >= FLICKER_DURATION) {
+        setActiveFont(REFERENCE_FONT);
+        setFlickerFinished(true);
+        return;
+      }
+
+      const progress = elapsed / FLICKER_DURATION;
+
+      /*
+        Rapide au début, puis de plus en plus lent.
+        Environ 65 ms au départ et 450 ms à la fin.
+      */
+      const delay = 65 + Math.pow(progress, 2.3) * 385;
+
+      let nextIndex;
+
+      do {
+        nextIndex = Math.floor(Math.random() * FLICKER_FONTS.length);
+      } while (
+        FLICKER_FONTS.length > 1 &&
+        nextIndex === previousIndex
+      );
+
+      previousIndex = nextIndex;
+      setActiveFont(FLICKER_FONTS[nextIndex]);
+
+      timeoutId = window.setTimeout(scheduleNextFont, delay);
     }
-  };
 
-  const handleClick = () => {
-    if (!isActive) {
-      setActiveTile(slotIndex);
-      return;
-    }
+    scheduleNextFont();
 
-    handleOpen();
-  };
-
-  const statusLabel =
-    displayedItem.status || (displayedItem.type === "film" ? "FILM" : "ÉDITO");
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      onMouseEnter={() => setActiveTile(slotIndex)}
-      onMouseLeave={() => setActiveTile(null)}
-      className={[
-        "relative h-full w-full overflow-hidden bg-black/40 text-left",
-        "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]",
-        "focus:outline-none focus:ring-2 focus:ring-white/30",
-        "cine-grain",
-        isActive ? "ring-2 ring-white/15" : "",
-      ].join(" ")}
+    <section
+      className="
+        relative
+        flex
+        min-h-[100svh]
+        snap-start
+        flex-col
+        justify-between
+        overflow-hidden
+        px-5
+        pb-8
+        pt-6
+      "
+      style={{
+        backgroundColor: theme.backgroundColor,
+        color: theme.textColor,
+      }}
     >
-      <div className="absolute inset-0 overflow-hidden">
-        {currentItem && (
-          <img
-            src={currentItem.src}
-            alt={currentItem.titre || "Projet"}
-            loading="lazy"
-            decoding="async"
-            onError={(e) => {
-              e.currentTarget.src = FALLBACK_THUMB;
-            }}
-            className={[
-              "absolute inset-0 h-full w-full object-cover",
-              "transition-[opacity,transform] duration-[1500ms]",
-              showNext ? "opacity-0 scale-[1.02]" : "opacity-95 scale-100",
-            ].join(" ")}
-          />
-        )}
+      <div className="relative z-10 flex items-center justify-between">
+        <p
+          className="text-[10px] font-semibold uppercase tracking-[0.3em]"
+          style={{ color: theme.subtleTextColor }}
+        >
+          Une initiative de La Niche Studio
+        </p>
 
-        {nextItem && (
-          <img
-            src={nextItem.src}
-            alt={nextItem.titre || "Projet"}
-            loading="eager"
-            decoding="async"
-            onError={(e) => {
-              e.currentTarget.src = FALLBACK_THUMB;
-            }}
-            className={[
-              "absolute inset-0 h-full w-full object-cover",
-              "transition-[opacity,transform] duration-[1500ms]",
-              showNext ? "opacity-95 scale-100" : "opacity-0 scale-[1.04]",
-            ].join(" ")}
-          />
-        )}
+        <p
+          className="text-[10px] uppercase tracking-[0.2em]"
+          style={{ color: theme.faintTextColor }}
+        >
+          
+        </p>
       </div>
 
-      <div
-        className={[
-          "absolute inset-0 z-10 bg-gradient-to-t from-black/75 via-black/25 to-black/5",
-          "transition-opacity duration-500",
-          isActive ? "opacity-100" : "opacity-70 hover:opacity-100",
-        ].join(" ")}
-      />
-
-      {statusLabel && (
-        <div
-          className="absolute left-3 top-3 z-30 rounded-full border border-white/10 px-3 py-1 text-xs font-bold text-white shadow-md"
-          style={{ backgroundColor: getStableColor(statusLabel) }}
+      <div className="relative z-10 mt-auto pb-10 pt-20">
+        <p
+          className="mb-5 text-[10px] font-semibold uppercase tracking-[0.3em]"
+          style={{ color: theme.subtleTextColor }}
         >
-          {statusLabel}
-        </div>
-      )}
+          
+        </p>
 
-      <div
-        className={[
-          "absolute inset-0 z-20 flex flex-col justify-end p-4 md:p-5",
-          "transition-opacity duration-300",
-          isActive ? "opacity-100" : "opacity-0 hover:opacity-100",
-        ].join(" ")}
-      >
-        {displayedItem.titre && (
-          <h3 className="text-lg font-bold leading-tight text-white md:text-xl">
-            {displayedItem.titre}
-          </h3>
-        )}
-
-        {displayedItem.type === "film" ? (
-          <p className="mt-1 text-sm text-gray-200">
-            {displayedItem.annee || ""}
-            {displayedItem.annee && displayedItem.real ? " — " : ""}
-            {displayedItem.real || ""}
-          </p>
-        ) : displayedItem.texte ? (
-          <p className="mt-1 line-clamp-3 text-sm text-gray-200">
-            {displayedItem.texte}
-          </p>
-        ) : null}
-
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-white/70">
-            {isActive ? "Re-tap pour ouvrir" : "Tap pour aperçu"}
+        <h1
+          className={`
+            title-font-flicker
+            origin-left
+            text-[4.2rem]
+            uppercase
+            min-[390px]:text-[4.85rem]
+            ${activeFont.className}
+            ${
+              flickerFinished
+                ? "title-font-flicker-finished"
+                : ""
+            }
+          `}
+          style={{
+            letterSpacing: activeFont.letterSpacing,
+            lineHeight: activeFont.lineHeight,
+            transform: activeFont.transform,
+          }}
+          aria-label="La Baie Vitrée"
+        >
+          <span className="block whitespace-nowrap" aria-hidden="true">
+            La Baie
           </span>
 
-          {isActive && (
-            <span className="ml-auto rounded border border-white/20 bg-white/10 px-2 py-1 text-xs">
-              Ouvrir →
-            </span>
-          )}
-        </div>
+          <span className="block whitespace-nowrap" aria-hidden="true">
+            Vitrée
+          </span>
+        </h1>
+
+        <p
+          className="mt-8 max-w-[19rem] text-base font-light leading-relaxed"
+          style={{ color: theme.subtleTextColor }}
+        >
+          La plateforme grenobloise du court-métrage indépendant.
+        </p>
       </div>
-    </button>
+
+      <div
+        className="relative z-10 flex items-end justify-between border-t pt-4"
+        style={{ borderColor: theme.borderColor }}
+      >
+        <p className="text-xs" style={{ color: theme.faintTextColor }}>
+          {filmCount} film{filmCount > 1 ? "s" : ""} à découvrir
+        </p>
+
+        <p
+          className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em]"
+          style={{ color: theme.subtleTextColor }}
+        >
+          Défiler
+          <span aria-hidden="true">↓</span>
+        </p>
+      </div>
+    </section>
   );
 }
 
-function MobileMosaicBackground({ items }) {
-  const images = items
-    .filter((item) => item.type === "film" || item.type === "edito")
-    .map((item) => item.src)
-    .filter(Boolean);
-
-  const mosaicImages = images.length
-    ? Array.from({ length: 36 }).map((_, index) => images[index % images.length])
-    : Array.from({ length: 36 }).map(() => FALLBACK_THUMB);
+function FilmHero({ film }) {
+  const image = getFilmImage(film);
+  const directors = getDirectors(film);
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
-      <style>{`
-        @keyframes lbvMobileMosaicSlide {
-          0% { transform: translateY(0); }
-          100% { transform: translateY(-28%); }
-        }
-      `}</style>
-
-      <div
-        className="grid w-full grid-cols-3 gap-1.5 p-1.5 opacity-80"
-        style={{
-          animation: "lbvMobileMosaicSlide 38s linear infinite",
-        }}
+    <article className="relative min-h-[100svh] snap-start overflow-hidden border-b border-white/10 bg-black">
+      <Link
+        to={getFilmUrl(film)}
+        className="group absolute inset-0 block"
+        aria-label={`Découvrir ${film.titre || "ce film"}`}
       >
-        {[...mosaicImages, ...mosaicImages].map((src, index) => (
-          <div
-            key={`${src}-${index}`}
-            className="aspect-[4/3] overflow-hidden rounded-md bg-white/5"
-          >
-            <img
-              src={src}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover"
-              onError={(e) => {
-                e.currentTarget.src = FALLBACK_THUMB;
-              }}
-            />
+        <img
+          src={image}
+          alt={film.titre || "Court-métrage"}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-active:scale-[1.01]"
+          onError={(event) => {
+            if (event.currentTarget.src.endsWith(FALLBACK_THUMB)) {
+              return;
+            }
+
+            event.currentTarget.src = FALLBACK_THUMB;
+          }}
+        />
+
+        <div className="absolute inset-0 bg-black/15" />
+
+        <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/95" />
+
+        <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-transparent" />
+
+        {film.genre && (
+          <span className="absolute left-5 top-6 z-10 rounded-full border border-white/20 bg-black/35 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-white backdrop-blur-sm">
+            {film.genre}
+          </span>
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 z-10 p-5 pb-8">
+          <h2 className="max-w-[92%] text-4xl font-black leading-[0.92] tracking-tight text-white min-[390px]:text-5xl">
+            {film.titre}
+          </h2>
+
+          {(directors || film.annee) && (
+            <p className="mt-4 text-sm leading-relaxed text-white/75">
+              {directors}
+              {directors && film.annee ? " — " : ""}
+              {film.annee || ""}
+            </p>
+          )}
+
+          {film.synopsis && (
+            <p className="mt-4 line-clamp-3 max-w-md text-sm leading-relaxed text-white/60">
+              {film.synopsis}
+            </p>
+          )}
+
+          <div className="mt-6 flex items-center justify-between border-t border-white/25 pt-4">
+            <span className="text-xs font-bold uppercase tracking-[0.18em] text-white">
+              Découvrir le film
+            </span>
+
+            <span className="text-2xl font-light text-white">→</span>
           </div>
+        </div>
+      </Link>
+    </article>
+  );
+}
+
+function MobileNavigationLink({
+  number,
+  title,
+  description,
+  to,
+  last = false,
+}) {
+  return (
+    <Link
+      to={to}
+      className={`
+        group
+        grid
+        grid-cols-[2.5rem_1fr_auto]
+        items-start
+        gap-3
+        px-5
+        py-7
+        ${last ? "" : "border-b border-white/10"}
+      `}
+    >
+      <span className="pt-1 text-[10px] font-semibold text-white/30">
+        {number}
+      </span>
+
+      <span>
+        <span className="block text-2xl font-black tracking-tight text-white">
+          {title}
+        </span>
+
+        <span className="mt-2 block max-w-[16rem] text-xs leading-relaxed text-white/45">
+          {description}
+        </span>
+      </span>
+
+      <span className="pt-1 text-2xl font-light text-white/60 transition-transform group-active:translate-x-1">
+        →
+      </span>
+    </Link>
+  );
+}
+
+function MobileHome({ films, editos }) {
+  const featuredFilms = useMemo(() => {
+    const eligibleFilms = films.filter(
+      (film) => film.featured === true
+    );
+
+    const randomizedFeatured = shuffleArray(eligibleFilms);
+
+    if (randomizedFeatured.length >= 3) {
+      return randomizedFeatured.slice(0, 3);
+    }
+
+    const selectedIds = new Set(
+      randomizedFeatured.map((film) => film.id)
+    );
+
+    const fallbackFilms = shuffleArray(
+      films.filter((film) => !selectedIds.has(film.id))
+    );
+
+    return [...randomizedFeatured, ...fallbackFilms].slice(0, 3);
+  }, [films]);
+
+  const featuredEdito = editos[0];
+
+  return (
+    <div className="bg-black text-white md:hidden">
+      <div className="snap-y snap-mandatory">
+        <MobileIntroHero filmCount={films.length} />
+
+        {featuredFilms.map((film) => (
+          <FilmHero key={film.id} film={film} />
         ))}
       </div>
+
+      {featuredEdito && (
+        <section className="border-b border-white/10 bg-white text-black">
+          <div className="px-5 py-14">
+            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-black/45">
+              Édito
+            </p>
+
+            <h2 className="mt-5 text-4xl font-black leading-[0.95] tracking-tight">
+              {featuredEdito.titre}
+            </h2>
+
+            {featuredEdito.texte && (
+              <p className="mt-6 line-clamp-6 text-base leading-relaxed text-black/65">
+                {featuredEdito.texte}
+              </p>
+            )}
+
+            {featuredEdito.url && featuredEdito.url !== "#" && (
+              <a
+                href={featuredEdito.url}
+                className="mt-8 flex items-center justify-between border-t border-black/20 pt-4 text-xs font-bold uppercase tracking-[0.18em]"
+              >
+                Lire la suite
+
+                <span className="text-2xl font-light">→</span>
+              </a>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className="border-b border-white/10 px-5 py-14">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/45">
+          Tous les films
+        </p>
+
+        <h2 className="mt-5 max-w-[20rem] text-4xl font-black leading-[0.95] tracking-tight">
+          Continuez votre exploration.
+        </h2>
+
+        <p className="mt-5 max-w-[20rem] text-sm leading-relaxed text-white/60">
+          Parcourez les films par année, réalisateur·ice, genre ou
+          statut.
+        </p>
+
+        <Link
+          to="/catalogue"
+          className="mt-8 flex items-center justify-between border-y border-white/25 py-5 text-sm font-bold uppercase tracking-[0.16em]"
+        >
+          Voir le catalogue complet
+
+          <span className="text-2xl font-light">→</span>
+        </Link>
+      </section>
+
+      <nav aria-label="Rubriques principales" className="bg-black">
+        <MobileNavigationLink
+          number="01"
+          title="Nouveautés"
+          description="Les derniers films arrivés sur la plateforme."
+          to="/nouveautes"
+        />
+
+        <MobileNavigationLink
+          number="02"
+          title="Ma fenêtre"
+          description="Retrouvez une sélection qui vous ressemble."
+          to="/fenetre"
+        />
+
+        <MobileNavigationLink
+          number="03"
+          title="Participer"
+          description="Proposer un film ou soutenir le projet."
+          to="/participer"
+        />
+
+        <MobileNavigationLink
+          number="04"
+          title="À propos"
+          description="Découvrir La Baie Vitrée et La Niche Studio."
+          to="/a-propos"
+          last
+        />
+      </nav>
     </div>
   );
 }
 
-function LoadingLanding() {
+function DesktopTile({ item, index }) {
+  if (item.type === "title") {
+    return (
+      <div
+        className="flex items-center justify-center overflow-hidden p-6"
+        style={{
+          backgroundColor: COLORS[index % COLORS.length],
+        }}
+      >
+        <p className="text-center text-6xl font-black uppercase leading-none tracking-tight lg:text-8xl">
+          {item.content}
+        </p>
+      </div>
+    );
+  }
+
+  if (item.type === "intro") {
+    return (
+      <div
+        className="flex flex-col items-center justify-center p-6 text-center"
+        style={{
+          backgroundColor: COLORS[index % COLORS.length],
+        }}
+      >
+        <p className="max-w-sm text-xl font-light leading-snug lg:text-2xl">
+          La plateforme grenobloise du court-métrage indépendant.
+        </p>
+
+        <div className="mt-6 flex gap-3">
+          <Link
+            to="/nouveautes"
+            className="rounded bg-white px-4 py-2 text-sm font-semibold text-black"
+          >
+            Nouveautés
+          </Link>
+
+          <Link
+            to="/catalogue"
+            className="rounded border border-white px-4 py-2 text-sm font-semibold"
+          >
+            Catalogue
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!item.film) {
+    return <div className="bg-white/[0.04]" />;
+  }
+
+  const film = item.film;
+  const image = getFilmThumbnail(film);
+  const directors = getDirectors(film);
+
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] w-full bg-black">
-      <div className="grid h-[calc(100vh-4rem)] w-full grid-cols-1 grid-rows-3 sm:grid-cols-2 lg:grid-cols-4">
+    <Link
+      to={getFilmUrl(film)}
+      className="group relative block overflow-hidden bg-black"
+    >
+      <img
+        src={image}
+        alt={film.titre || "Court-métrage"}
+        loading="lazy"
+        decoding="async"
+        className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+        onError={(event) => {
+          if (event.currentTarget.src.endsWith(FALLBACK_THUMB)) {
+            return;
+          }
+
+          event.currentTarget.src = FALLBACK_THUMB;
+        }}
+      />
+
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent opacity-75 transition-opacity group-hover:opacity-100" />
+
+      {film.genre && (
+        <span
+          className="absolute left-3 top-3 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white"
+          style={{
+            backgroundColor: getStableColor(film.genre),
+          }}
+        >
+          {film.genre}
+        </span>
+      )}
+
+      <div className="absolute inset-x-0 bottom-0 p-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+        <h2 className="text-xl font-black leading-tight">
+          {film.titre}
+        </h2>
+
+        <p className="mt-2 text-xs text-white/70">
+          {directors}
+          {directors && film.annee ? " — " : ""}
+          {film.annee || ""}
+        </p>
+      </div>
+    </Link>
+  );
+}
+
+function DesktopHome({ films }) {
+  const gridItems = useMemo(() => {
+    const visualItems = films.slice(0, 8);
+
+    return [
+      {
+        type: "title",
+        content: "LA",
+      },
+      {
+        type: "film",
+        film: visualItems[0],
+      },
+      {
+        type: "intro",
+      },
+      {
+        type: "film",
+        film: visualItems[1],
+      },
+      {
+        type: "film",
+        film: visualItems[2],
+      },
+      {
+        type: "title",
+        content: "BAIE",
+      },
+      {
+        type: "film",
+        film: visualItems[3],
+      },
+      {
+        type: "film",
+        film: visualItems[4],
+      },
+      {
+        type: "film",
+        film: visualItems[5],
+      },
+      {
+        type: "film",
+        film: visualItems[6],
+      },
+      {
+        type: "title",
+        content: "VITRÉE",
+      },
+      {
+        type: "film",
+        film: visualItems[7],
+      },
+    ];
+  }, [films]);
+
+  return (
+    <div className="hidden h-[calc(100vh-4rem)] grid-cols-2 grid-rows-6 bg-black md:grid lg:grid-cols-4 lg:grid-rows-3">
+      {gridItems.map((item, index) => (
+        <DesktopTile
+          key={`${item.type}-${item.film?.id || item.content || index}`}
+          item={item}
+          index={index}
+        />
+      ))}
+    </div>
+  );
+}
+
+function LoadingHome() {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-black">
+      <div className="md:hidden">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="min-h-[100svh] animate-pulse border-b border-white/10 bg-white/[0.05]"
+          />
+        ))}
+      </div>
+
+      <div className="hidden h-[calc(100vh-4rem)] grid-cols-4 grid-rows-3 md:grid">
         {Array.from({ length: 12 }).map((_, index) => (
           <div
             key={index}
-            className="relative overflow-hidden border border-white/5 bg-white/[0.04]"
-          >
-            <div className="absolute inset-0 animate-pulse bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.06),transparent)]" />
-          </div>
+            className="animate-pulse border border-white/5 bg-white/[0.04]"
+          />
         ))}
       </div>
     </div>
@@ -445,405 +819,96 @@ function LoadingLanding() {
 }
 
 export default function Accueil() {
-  const navigate = useNavigate();
-
   const [films, setFilms] = useState([]);
-  const [filmsLoading, setFilmsLoading] = useState(true);
-
   const [editos, setEditos] = useState([]);
-  const [editosLoading, setEditosLoading] = useState(true);
-
-  const [initialReady, setInitialReady] = useState(false);
-  const [tick, setTick] = useState(0);
-  const [activeTile, setActiveTile] = useState(null);
-
-  useEffect(() => {
-    async function fetchFilms() {
-      try {
-        setFilmsLoading(true);
-
-        const { data, error } = await supabase
-          .from("films")
-          .select("*")
-          .eq("is_published", true)
-          .order("created_at", { ascending: false });
-
-        if (error) {
-          console.error("Erreur Supabase films :", error);
-          setFilms([]);
-          return;
-        }
-
-        setFilms(data || []);
-      } catch (error) {
-        console.error("Erreur chargement films :", error);
-        setFilms([]);
-      } finally {
-        setFilmsLoading(false);
-      }
-    }
-
-    fetchFilms();
-  }, []);
-
-  useEffect(() => {
-    async function fetchEditos() {
-      try {
-        setEditosLoading(true);
-
-        const { data, error } = await supabase
-          .from("editos")
-          .select("*")
-          .eq("is_published", true)
-          .order("poids", { ascending: false })
-          .order("created_at", { ascending: false });
-
-        if (error) {
-          console.error("Erreur Supabase éditos :", error);
-          setEditos([]);
-          return;
-        }
-
-        setEditos(data || []);
-      } catch (error) {
-        console.error("Erreur chargement éditos :", error);
-        setEditos([]);
-      } finally {
-        setEditosLoading(false);
-      }
-    }
-
-    fetchEditos();
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") setActiveTile(null);
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  const formattedFilms = useMemo(() => {
-    return films.map((film) => ({
-      id: film.id,
-      slug: film.slug,
-      titre: film.titre || "",
-      annee: film.annee || "",
-      real: [film.realisateur_1, film.realisateur_2].filter(Boolean).join(" & "),
-      src:
-        film.miniature_url ||
-        (film.vimeo_id
-          ? `https://vumbnail.com/${film.vimeo_id}.jpg`
-          : FALLBACK_THUMB),
-      type: "film",
-      priorite: 0,
-      status: film.status || "FILM",
-    }));
-  }, [films]);
-
-  const formattedEditos = useMemo(() => {
-    return editos.map((edito) => ({
-      id: edito.id,
-      titre: edito.titre || "",
-      texte: edito.texte || "",
-      src: edito.image_url || FALLBACK_THUMB,
-      url: edito.url || "#",
-      type: "edito",
-      priorite: Number(edito.poids) || 0,
-      status: edito.status || "ÉDITO",
-    }));
-  }, [editos]);
-
-  const allContent = useMemo(() => {
-    const films = [...formattedFilms];
-    const editos = [...formattedEditos].sort(
-      (a, b) => (b.priorite || 0) - (a.priorite || 0)
-    );
-
-    if (!films.length) return editos;
-    if (!editos.length) return films;
-
-    const result = [];
-    let editoIndex = 0;
-
-    films.forEach((film, index) => {
-      result.push(film);
-
-      if ((index + 1) % 8 === 0) {
-        result.push(editos[editoIndex % editos.length]);
-        editoIndex += 1;
-      }
-    });
-
-    return result;
-  }, [formattedFilms, formattedEditos]);
-
-  const baseGridItems = useMemo(() => {
-    return Array.from({ length: 12 }).map((_, index) => {
-      if (index === 0) return { type: "text", content: "LA" };
-      if (index === 2) {
-        return {
-          type: "subtitle",
-          content: "La plateforme grenobloise du court-métrage indépendant !",
-        };
-      }
-      if (index === 5) return { type: "text", content: "BAIE" };
-      if (index === 10) return { type: "text", content: "VITRÉE" };
-
-      const item = allContent.length ? allContent[index % allContent.length] : null;
-      return item || { type: "empty" };
-    });
-  }, [allContent]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function prepareInitialRender() {
-      const dataReady = !filmsLoading && !editosLoading && allContent.length > 0;
-      if (!dataReady) return;
+    async function loadHome() {
+      setLoading(true);
 
-      const initialSources = baseGridItems
-        .filter((item) => item.type === "film" || item.type === "edito")
-        .map((item) => item.src)
-        .filter(Boolean);
+      try {
+        const [filmsResponse, editosResponse] = await Promise.all([
+          supabase
+            .from("films")
+            .select("*")
+            .eq("is_published", true)
+            .order("created_at", {
+              ascending: false,
+            }),
 
-      await preloadMany(initialSources);
+          supabase
+            .from("editos")
+            .select("*")
+            .eq("is_published", true)
+            .order("poids", {
+              ascending: false,
+            })
+            .order("created_at", {
+              ascending: false,
+            }),
+        ]);
 
-      if (!cancelled) setInitialReady(true);
+        if (filmsResponse.error) {
+          throw filmsResponse.error;
+        }
+
+        if (editosResponse.error) {
+          console.error(
+            "Erreur Supabase lors du chargement des éditos :",
+            editosResponse.error
+          );
+        }
+
+        if (!cancelled) {
+          setFilms(filmsResponse.data || []);
+          setEditos(editosResponse.data || []);
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement de l’accueil :", error);
+
+        if (!cancelled) {
+          setFilms([]);
+          setEditos([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
 
-    prepareInitialRender();
+    loadHome();
 
     return () => {
       cancelled = true;
     };
-  }, [filmsLoading, editosLoading, allContent.length, baseGridItems]);
+  }, []);
 
-  useEffect(() => {
-    if (!initialReady) return;
-
-    const interval = setInterval(() => {
-      setTick((value) => value + 1);
-    }, ROTATION_MS);
-
-    return () => clearInterval(interval);
-  }, [initialReady]);
-
-  const colorIndex = tick % COLORS.length;
-  const offset = allContent.length ? tick % allContent.length : 0;
-
-  const desktopGridItems = useMemo(() => {
-    return Array.from({ length: 12 }).map((_, index) => {
-      if (index === 0) return { type: "text", content: "LA" };
-      if (index === 2) {
-        return {
-          type: "subtitle",
-          content: "La plateforme grenobloise du court-métrage indépendant !",
-        };
-      }
-      if (index === 5) return { type: "text", content: "BAIE" };
-      if (index === 10) return { type: "text", content: "VITRÉE" };
-
-      const item = allContent.length
-        ? allContent[(offset + index) % allContent.length]
-        : null;
-
-      return item || { type: "empty" };
-    });
-  }, [allContent, offset]);
-
-  useEffect(() => {
-    if (!initialReady) return;
-
-    const upcomingSources = desktopGridItems
-      .filter((item) => item.type === "film" || item.type === "edito")
-      .map((item) => item.src)
-      .filter(Boolean);
-
-    preloadMany(upcomingSources);
-  }, [desktopGridItems, initialReady]);
-
-  const showLoader =
-    !initialReady || filmsLoading || editosLoading || !allContent.length;
-
-  function renderTile(item, index) {
-    if (item.type === "text") {
-      return (
-        <SmoothColorTile
-          key={index}
-          color={COLORS[colorIndex]}
-          tick={tick}
-          slotIndex={index}
-          className="flex items-center justify-center"
-          innerClassName="flex items-center justify-center"
-        >
-          <div className="text-6xl font-extrabold tracking-wide text-white transition-transform duration-700 hover:scale-[1.02] sm:text-7xl lg:text-8xl">
-            {item.content}
-          </div>
-        </SmoothColorTile>
-      );
-    }
-
-    if (item.type === "subtitle") {
-      return (
-        <SmoothColorTile
-          key={index}
-          color={COLORS[colorIndex]}
-          tick={tick}
-          slotIndex={index}
-          className="flex items-center justify-center p-5 text-center text-white"
-          innerClassName="flex h-full flex-col items-center justify-center"
-        >
-          <p className="mb-4 max-w-[28rem] text-sm font-light leading-snug sm:text-lg lg:text-2xl">
-            {item.content}
-          </p>
-
-          <div className="mb-5 flex flex-wrap justify-center gap-2">
-            <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
-              Gratuit
-            </span>
-            <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
-              Don volontaire
-            </span>
-            <span className="rounded-full border border-white/20 bg-black/25 px-2 py-1 text-[10px] backdrop-blur-sm md:text-xs">
-              Ouverte à tous
-            </span>
-          </div>
-
-          <div className="flex gap-3">
-            <Link
-              to="/nouveautes"
-              className="rounded bg-white px-4 py-2 text-sm text-black transition hover:bg-white/90 md:text-base"
-            >
-              Nouveautés
-            </Link>
-
-            <Link
-              to="/catalogue"
-              className="rounded border border-white px-4 py-2 text-sm text-white transition hover:bg-white/10 md:text-base"
-            >
-              Voir le catalogue
-            </Link>
-          </div>
-        </SmoothColorTile>
-      );
-    }
-
-    if (item.type === "film" || item.type === "edito") {
-      return (
-        <RotatingMediaTile
-          key={index}
-          item={item}
-          tick={tick}
-          slotIndex={index}
-          isActive={activeTile === index}
-          setActiveTile={setActiveTile}
-          navigate={navigate}
-        />
-      );
-    }
-
-    return <div key={index} className="bg-black/25" />;
+  if (loading) {
+    return <LoadingHome />;
   }
 
-  if (showLoader) {
-    return <LoadingLanding />;
+  if (!films.length) {
+    return (
+      <section className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-black px-6 text-center text-white">
+        <div>
+          <h1 className="text-4xl font-black">La Baie Vitrée</h1>
+
+          <p className="mt-4 text-sm text-white/60">
+            Aucun film publié n’est disponible pour le moment.
+          </p>
+        </div>
+      </section>
+    );
   }
 
   return (
-    <div className="relative w-full bg-black">
-      {/* MOBILE : affiche avec mosaïque animée */}
-      <div className="md:hidden">
-        <section className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-black text-white">
-          <MobileMosaicBackground items={allContent} />
-
-          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-black/15" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black" />
-          <div className="absolute inset-0 bg-black/25" />
-
-          <div className="relative z-10 flex min-h-[calc(100vh-4rem)] flex-col justify-center px-6 py-10">
-            <p className="mb-5 text-xs font-bold uppercase tracking-[0.28em] text-white/75">
-              La Niche Studio présente
-            </p>
-
-            <h1 className="text-[4.8rem] font-black uppercase leading-[0.86] tracking-tight text-white drop-shadow-2xl">
-              La
-              <br />
-              Baie
-              <br />
-              Vitrée
-            </h1>
-
-            <div className="mt-7 h-px w-20 bg-white/70" />
-
-            <p className="mt-6 max-w-[19rem] text-xl font-light leading-snug text-white">
-              Le court-métrage indépendant grenoblois, à portée de main.
-            </p>
-
-            <div className="mt-8 space-y-3">
-              <Link
-                to="/catalogue"
-                className="flex items-center justify-between rounded-xl bg-white px-5 py-4 text-sm font-black uppercase tracking-wide text-black shadow-2xl"
-              >
-                Entrer dans le catalogue
-                <span className="text-2xl leading-none">→</span>
-              </Link>
-
-              <Link
-                to="/fenetre"
-                className="flex items-center justify-between rounded-xl border border-white/60 bg-black/25 px-5 py-4 text-sm font-bold uppercase tracking-wide text-white backdrop-blur-sm"
-              >
-                Ma fenêtre
-                <span className="text-2xl leading-none">→</span>
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        <section className="grid grid-cols-2 border-t border-white/10 bg-black">
-          <Link
-            to="/nouveautes"
-            className="border-b border-r border-white/10 p-5 text-center"
-          >
-            <p className="text-2xl">✨</p>
-            <p className="mt-2 text-sm font-bold uppercase">Nouveautés</p>
-            <p className="mt-1 text-xs text-white/55">Les derniers films</p>
-          </Link>
-
-          <Link
-            to="/catalogue"
-            className="border-b border-white/10 p-5 text-center"
-          >
-            <p className="text-2xl">🎬</p>
-            <p className="mt-2 text-sm font-bold uppercase">Catalogue</p>
-            <p className="mt-1 text-xs text-white/55">Explorer les films</p>
-          </Link>
-
-          <Link
-            to="/participer"
-            className="border-r border-white/10 p-5 text-center"
-          >
-            <p className="text-2xl">💛</p>
-            <p className="mt-2 text-sm font-bold uppercase">Participer</p>
-            <p className="mt-1 text-xs text-white/55">Soutenir / proposer</p>
-          </Link>
-
-          <Link to="/a-propos" className="p-5 text-center">
-            <p className="text-2xl">ⓘ</p>
-            <p className="mt-2 text-sm font-bold uppercase">À propos</p>
-            <p className="mt-1 text-xs text-white/55">La Baie Vitrée</p>
-          </Link>
-        </section>
-      </div>
-
-      {/* ORDI : mosaïque actuelle conservée */}
-      <div className="hidden h-[calc(100vh-4rem)] w-full grid-cols-2 grid-rows-3 bg-black/90 md:grid lg:grid-cols-4">
-        {desktopGridItems.map((item, index) => renderTile(item, index))}
-      </div>
-
-      <BubbleHintPopup />
-    </div>
+    <main className="bg-black text-white">
+      <MobileHome films={films} editos={editos} />
+      <DesktopHome films={films} />
+    </main>
   );
 }

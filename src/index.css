@@ -1,34 +1,241 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-/* 🎞️ Grain ciné très léger */
+
+/* ========================================
+   BASE DU SITE
+======================================== */
+
+:root {
+  font-family: "Inter", sans-serif;
+  color: #ffffff;
+  background: #000000;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  min-height: 100%;
+  background: #000000;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background: #000000;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ========================================
+   ANIMATIONS EXISTANTES
+======================================== */
+
+@keyframes openWindow {
+  0% {
+    transform: perspective(120px) rotateY(0deg);
+  }
+
+  45% {
+    transform: perspective(120px) rotateY(-65deg);
+  }
+
+  100% {
+    transform: perspective(120px) rotateY(0deg);
+  }
+}
+
+@keyframes wind {
+  0% {
+    transform: translateX(-8px);
+    opacity: 0;
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(22px);
+    opacity: 0;
+  }
+}
+
+/* ========================================
+   GRAIN CINÉMATOGRAPHIQUE
+======================================== */
+
+.cine-grain {
+  position: relative;
+}
+
 .cine-grain::after {
-  content: "";
   position: absolute;
   inset: 0;
+  z-index: 30;
   pointer-events: none;
+  content: "";
+  opacity: 0.07;
+  mix-blend-mode: screen;
+
   background-image:
     repeating-radial-gradient(
       circle at 50% 50%,
-      rgba(255,255,255,0.015),
-      rgba(255,255,255,0.015) 1px,
-      rgba(0,0,0,0.015) 2px
+      rgba(255, 255, 255, 0.18) 0,
+      rgba(255, 255, 255, 0.18) 1px,
+      transparent 1px,
+      transparent 3px
     );
-  mix-blend-mode: overlay;
-  opacity: 0.35;
 }
 
-html,
-body {
-  @apply bg-black text-white;
+/* ========================================
+   TYPOGRAPHIES DU FLICKER
+======================================== */
+
+.font-flicker-anton {
+  font-family: "Anton", sans-serif;
+  font-weight: 400;
 }
 
-html,
-body,
-#root {
-  min-height: 100%;
+.font-flicker-archivo {
+  font-family: "Archivo Black", sans-serif;
+  font-weight: 400;
 }
 
-body {
-  overflow-x: hidden;
+.font-flicker-bebas {
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 400;
+}
+
+.font-flicker-cormorant {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 700;
+  font-style: italic;
+}
+
+.font-flicker-dm-serif {
+  font-family: "DM Serif Display", serif;
+  font-weight: 400;
+}
+
+.font-flicker-ibm {
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 700;
+}
+
+.font-flicker-inter {
+  font-family: "Inter", sans-serif;
+  font-weight: 900;
+}
+
+.font-flicker-oswald {
+  font-family: "Oswald", sans-serif;
+  font-weight: 700;
+}
+
+.font-flicker-playfair {
+  font-family: "Playfair Display", serif;
+  font-weight: 800;
+  font-style: italic;
+}
+
+/* Typographie finale de référence */
+
+.font-title-reference {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  font-style: normal;
+}
+
+/* ========================================
+   EFFET DE FLICKER DU TITRE
+======================================== */
+
+.title-font-flicker {
+  transform-origin: left center;
+  transition: none;
+
+  will-change:
+    font-family,
+    font-weight,
+    font-style,
+    letter-spacing,
+    line-height,
+    transform,
+    opacity;
+}
+
+@keyframes titleFlickerFlash {
+  0% {
+    opacity: 1;
+  }
+
+  35% {
+    opacity: 0.58;
+  }
+
+  60% {
+    opacity: 0.92;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.title-font-flicker:not(.title-font-flicker-finished) {
+  animation: titleFlickerFlash 115ms steps(2, end);
+}
+
+.title-font-flicker-finished {
+  opacity: 1;
+}
+
+/* Respect des préférences d’accessibilité */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .title-font-flicker {
+    font-family: "Space Grotesk", sans-serif !important;
+    font-weight: 700 !important;
+    font-style: normal !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
